@@ -8,13 +8,16 @@ RUN go build -o ./extra/healthcheck ./extra/healthcheck.go
 
 ############################################
 # Stage 2: Build frontend
-# node-pty (and other native addons) are not needed for the Vite build,
-# so skip postinstall scripts to avoid needing a C++ toolchain here.
+# esbuild (used by Vite) requires its postinstall to run so the native binary
+# is downloaded. node-pty also compiles here, so install a C++ toolchain.
 ############################################
 FROM node:22-bookworm-slim AS build_frontend
 WORKDIR /app
+RUN apt-get update && apt-get install --yes --no-install-recommends \
+        python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+RUN npm ci
 COPY . .
 RUN npm run build:frontend
 

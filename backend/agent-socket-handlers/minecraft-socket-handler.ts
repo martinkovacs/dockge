@@ -48,7 +48,8 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
             try {
                 checkLogin(socket);
                 const allSettings = await Settings.getSettings("minecraft");
-                callbackResult({ ok: true, settings: allSettings }, callback);
+                callbackResult({ ok: true,
+                    settings: allSettings }, callback);
             } catch (e) {
                 callbackError(e, callback);
             }
@@ -110,7 +111,8 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                 terminal.join(socket);
                 terminal.start();
 
-                callbackResult({ ok: true, terminalName }, callback);
+                callbackResult({ ok: true,
+                    terminalName }, callback);
             } catch (e) {
                 callbackError(e, callback);
             }
@@ -155,7 +157,8 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                     return a.name.localeCompare(b.name);
                 });
 
-                callbackResult({ ok: true, entries }, callback);
+                callbackResult({ ok: true,
+                    entries }, callback);
             } catch (e) {
                 callbackError(e, callback);
             }
@@ -180,7 +183,8 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                 }
 
                 const content = await fsAsync.readFile(targetPath, "utf-8");
-                callbackResult({ ok: true, content }, callback);
+                callbackResult({ ok: true,
+                    content }, callback);
             } catch (e) {
                 callbackError(e, callback);
             }
@@ -224,7 +228,8 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
 
                 const stat = await fsAsync.stat(targetPath);
                 if (stat.isDirectory()) {
-                    await fsAsync.rm(targetPath, { recursive: true, force: true });
+                    await fsAsync.rm(targetPath, { recursive: true,
+                        force: true });
                 } else {
                     await fsAsync.unlink(targetPath);
                 }

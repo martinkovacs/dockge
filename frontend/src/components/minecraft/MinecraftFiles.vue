@@ -113,7 +113,9 @@
                                 v-if="!entry.isDir && isEditable(entry.name)"
                                 class="btn btn-xs btn-normal me-1"
                                 @click="editFile(entry)"
-                            >Edit</button>
+                            >
+                                Edit
+                            </button>
                             <button class="btn btn-xs btn-normal me-1" @click="download(entry)">
                                 <font-awesome-icon icon="download" />
                             </button>
@@ -163,12 +165,16 @@ const EDITABLE_EXTS = new Set([
 ]);
 
 export default {
-    components: { FontAwesomeIcon, FileEditor },
+    components: { FontAwesomeIcon,
+        FileEditor },
 
     props: {
-        endpoint: { type: String, required: true },
-        stackName: { type: String, required: true },
-        token: { type: String, default: "" },
+        endpoint: { type: String,
+            required: true },
+        stackName: { type: String,
+            required: true },
+        token: { type: String,
+            default: "" },
     },
 
     data() {

@@ -63,9 +63,12 @@ export default {
             savedMsg: "",
             saveMsgTimeout: null,
             modeOptions: [
-                { value: "auto", label: "Auto" },
-                { value: "on", label: "Always On" },
-                { value: "off", label: "Always Off" },
+                { value: "auto",
+                    label: "Auto" },
+                { value: "on",
+                    label: "Always On" },
+                { value: "off",
+                    label: "Always Off" },
             ],
         };
     },
@@ -102,7 +105,8 @@ export default {
         },
 
         setMode(stackName, mode) {
-            this.modes = { ...this.modes, [stackName]: mode };
+            this.modes = { ...this.modes,
+                [stackName]: mode };
             this.$root.emitAgent("", "setStackMinecraftView", stackName, mode, (res) => {
                 if (res.ok) {
                     this.showSaved(`Saved for "${stackName}"`);

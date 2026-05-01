@@ -113,7 +113,14 @@ function parseBytes(str) {
     if (!str) {
         return 0;
     }
-    const units = { B: 1, kB: 1e3, KB: 1e3, MB: 1e6, MiB: 1048576, GB: 1e9, GiB: 1073741824, TB: 1e12 };
+    const units = { B: 1,
+        kB: 1e3,
+        KB: 1e3,
+        MB: 1e6,
+        MiB: 1048576,
+        GB: 1e9,
+        GiB: 1073741824,
+        TB: 1e12 };
     const m = str.trim().match(/^([\d.]+)\s*([A-Za-z]+)$/);
     if (!m) {
         return 0;
@@ -141,25 +148,36 @@ function parseMemPercent(memUsage) {
 
 function parseNetIO(str) {
     if (!str) {
-        return { rx: 0, tx: 0 };
+        return { rx: 0,
+            tx: 0 };
     }
     const parts = str.split(" / ");
     if (parts.length !== 2) {
-        return { rx: 0, tx: 0 };
+        return { rx: 0,
+            tx: 0 };
     }
-    return { rx: parseBytes(parts[0]), tx: parseBytes(parts[1]) };
+    return { rx: parseBytes(parts[0]),
+        tx: parseBytes(parts[1]) };
 }
 
 export default {
-    components: { Terminal, MiniChart, FontAwesomeIcon },
+    components: { Terminal,
+        MiniChart,
+        FontAwesomeIcon },
 
     props: {
-        endpoint: { type: String, required: true },
-        stackName: { type: String, required: true },
-        serviceName: { type: String, required: true },
-        status: { type: Number, default: 0 },
-        dockerStats: { type: Object, default: () => ({}) },
-        jsonConfig: { type: Object, default: () => ({}) },
+        endpoint: { type: String,
+            required: true },
+        stackName: { type: String,
+            required: true },
+        serviceName: { type: String,
+            required: true },
+        status: { type: Number,
+            default: 0 },
+        dockerStats: { type: Object,
+            default: () => ({}) },
+        jsonConfig: { type: Object,
+            default: () => ({}) },
     },
 
     data() {
@@ -225,17 +243,25 @@ export default {
         },
 
         cpuDatasets() {
-            return [ { label: "CPU", data: this.cpuHistory, color: "#74c2ff" } ];
+            return [{ label: "CPU",
+                data: this.cpuHistory,
+                color: "#74c2ff" }];
         },
 
         memDatasets() {
-            return [ { label: "Memory", data: this.memHistory, color: "#86e6a9" } ];
+            return [{ label: "Memory",
+                data: this.memHistory,
+                color: "#86e6a9" }];
         },
 
         netDatasets() {
             return [
-                { label: "In", data: this.netRxHistory, color: "#74c2ff" },
-                { label: "Out", data: this.netTxHistory, color: "#f8a306" },
+                { label: "In",
+                    data: this.netRxHistory,
+                    color: "#74c2ff" },
+                { label: "Out",
+                    data: this.netTxHistory,
+                    color: "#f8a306" },
             ];
         },
     },

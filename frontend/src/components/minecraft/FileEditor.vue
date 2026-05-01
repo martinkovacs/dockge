@@ -48,7 +48,8 @@ function extensionsForFile(filename) {
 }
 
 export default {
-    components: { CodeMirror, BModal },
+    components: { CodeMirror,
+        BModal },
 
     props: {
         filePath: {

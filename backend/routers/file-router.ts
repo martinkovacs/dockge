@@ -50,7 +50,8 @@ export class FileRouter extends Router {
         router.get("/api/files/:stackName/*", async (req: Request, res: Response) => {
             try {
                 if (!checkAuth(req, server.jwtSecret)) {
-                    res.status(401).json({ ok: false, msg: "Unauthorized" });
+                    res.status(401).json({ ok: false,
+                        msg: "Unauthorized" });
                     return;
                 }
 
@@ -61,7 +62,8 @@ export class FileRouter extends Router {
                 try {
                     stack = await Stack.getStack(server, stackName);
                 } catch (_) {
-                    res.status(404).json({ ok: false, msg: "Stack not found" });
+                    res.status(404).json({ ok: false,
+                        msg: "Stack not found" });
                     return;
                 }
 
@@ -69,12 +71,14 @@ export class FileRouter extends Router {
                 try {
                     targetPath = safePath(stack.path, relPath);
                 } catch (_) {
-                    res.status(400).json({ ok: false, msg: "Invalid path" });
+                    res.status(400).json({ ok: false,
+                        msg: "Invalid path" });
                     return;
                 }
 
                 if (!fs.existsSync(targetPath)) {
-                    res.status(404).json({ ok: false, msg: "File not found" });
+                    res.status(404).json({ ok: false,
+                        msg: "File not found" });
                     return;
                 }
 
@@ -104,7 +108,8 @@ export class FileRouter extends Router {
             } catch (e) {
                 log.error("FileRouter", String(e));
                 if (!res.headersSent) {
-                    res.status(500).json({ ok: false, msg: "Internal server error" });
+                    res.status(500).json({ ok: false,
+                        msg: "Internal server error" });
                 }
             }
         });
@@ -113,7 +118,8 @@ export class FileRouter extends Router {
         router.post("/api/files/:stackName/*", async (req: Request, res: Response) => {
             try {
                 if (!checkAuth(req, server.jwtSecret)) {
-                    res.status(401).json({ ok: false, msg: "Unauthorized" });
+                    res.status(401).json({ ok: false,
+                        msg: "Unauthorized" });
                     return;
                 }
 
@@ -124,7 +130,8 @@ export class FileRouter extends Router {
                 try {
                     stack = await Stack.getStack(server, stackName);
                 } catch (_) {
-                    res.status(404).json({ ok: false, msg: "Stack not found" });
+                    res.status(404).json({ ok: false,
+                        msg: "Stack not found" });
                     return;
                 }
 
@@ -132,7 +139,8 @@ export class FileRouter extends Router {
                 try {
                     targetDir = safePath(stack.path, relPath);
                 } catch (_) {
-                    res.status(400).json({ ok: false, msg: "Invalid path" });
+                    res.status(400).json({ ok: false,
+                        msg: "Invalid path" });
                     return;
                 }
 
@@ -160,14 +168,16 @@ export class FileRouter extends Router {
                         await Promise.all(writes);
                         res.json({ ok: true });
                     } catch (e) {
-                        res.status(500).json({ ok: false, msg: String(e) });
+                        res.status(500).json({ ok: false,
+                            msg: String(e) });
                     }
                 });
 
                 bb.on("error", (e) => {
                     log.error("FileRouter", "Upload error: " + e);
                     if (!res.headersSent) {
-                        res.status(500).json({ ok: false, msg: String(e) });
+                        res.status(500).json({ ok: false,
+                            msg: String(e) });
                     }
                 });
 
@@ -175,7 +185,8 @@ export class FileRouter extends Router {
             } catch (e) {
                 log.error("FileRouter", String(e));
                 if (!res.headersSent) {
-                    res.status(500).json({ ok: false, msg: "Internal server error" });
+                    res.status(500).json({ ok: false,
+                        msg: "Internal server error" });
                 }
             }
         });

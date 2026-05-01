@@ -54,14 +54,21 @@ import MinecraftFiles from "./MinecraftFiles.vue";
 const MINECRAFT_IMAGES = [ "itzg/minecraft-server", "itzg/mc-proxy" ];
 
 export default {
-    components: { FontAwesomeIcon, MinecraftConsole, MinecraftFiles },
+    components: { FontAwesomeIcon,
+        MinecraftConsole,
+        MinecraftFiles },
 
     props: {
-        endpoint: { type: String, required: true },
-        stackName: { type: String, required: true },
-        status: { type: Number, default: 0 },
-        dockerStats: { type: Object, default: () => ({}) },
-        jsonConfig: { type: Object, default: () => ({}) },
+        endpoint: { type: String,
+            required: true },
+        stackName: { type: String,
+            required: true },
+        status: { type: Number,
+            default: 0 },
+        dockerStats: { type: Object,
+            default: () => ({}) },
+        jsonConfig: { type: Object,
+            default: () => ({}) },
     },
 
     data() {
