@@ -154,7 +154,7 @@ export default {
             while (this.chart.data.datasets.length > newDatasets.length) {
                 this.chart.data.datasets.pop();
             }
-            this.chart.update("none");
+            this.chart.update();
         },
     },
 };

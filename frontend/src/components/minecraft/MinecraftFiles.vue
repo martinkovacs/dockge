@@ -20,7 +20,21 @@
                 </ol>
             </nav>
 
-            <!-- Actions -->
+            <!-- Selection actions (shown when files are selected) -->
+            <template v-if="selectedEntries.length === 1 && !selectedEntries[0].isDir">
+                <button class="btn btn-sm btn-normal" @click="download(selectedEntries[0])">
+                    <font-awesome-icon icon="download" class="me-1" />
+                    Download
+                </button>
+            </template>
+            <template v-if="selectedEntries.length > 0">
+                <button class="btn btn-sm btn-danger" @click="deleteSelected">
+                    <font-awesome-icon icon="trash" class="me-1" />
+                    Delete{{ selectedEntries.length > 1 ? ` (${selectedEntries.length})` : '' }}
+                </button>
+            </template>
+
+            <!-- Fixed actions -->
             <button class="btn btn-sm btn-normal" :disabled="loading" @click="reload">
                 <font-awesome-icon icon="rotate" />
             </button>
@@ -33,19 +47,6 @@
                 Upload
                 <input ref="fileInput" type="file" multiple class="d-none" @change="handleFileInput" />
             </label>
-        </div>
-
-        <!-- Selection action bar -->
-        <div v-if="selectedEntry && !selectedEntry.isDir" class="mc-selection-bar d-flex align-items-center gap-2 mb-2 px-1">
-            <span class="flex-grow-1 text-secondary" style="font-size: 13px;">{{ selectedEntry.name }}</span>
-            <button class="btn btn-sm btn-normal" @click="download(selectedEntry)">
-                <font-awesome-icon icon="download" class="me-1" />
-                Download
-            </button>
-            <button class="btn btn-sm btn-danger" @click="deleteEntry(selectedEntry); selectedEntry = null">
-                <font-awesome-icon icon="trash" class="me-1" />
-                Delete
-            </button>
         </div>
 
         <!-- New folder prompt -->
@@ -95,11 +96,11 @@
                         </td>
                     </tr>
                     <tr
-                        v-for="entry in entries"
+                        v-for="(entry, idx) in entries"
                         :key="entry.name"
                         class="mc-file-row"
-                        :class="{ selected: selectedEntry?.name === entry.name }"
-                        @click.stop="entry.isDir ? navigate(joinPath(currentPath, entry.name)) : (selectedEntry = selectedEntry?.name === entry.name ? null : entry)"
+                        :class="{ selected: isSelected(entry) }"
+                        @click.stop="handleRowClick(entry, idx, $event)"
                         @dblclick.stop="!entry.isDir ? editFile(entry) : null"
                     >
                         <td class="mc-file-name">
@@ -178,9 +179,8 @@ export default {
             editingContent: "",
             showMkdirPrompt: false,
             newFolderName: "",
-            renamingEntry: null,
-            renameValue: "",
-            selectedEntry: null,
+            selectedEntries: [],
+            lastClickedIdx: null,
         };
     },
 
@@ -208,7 +208,8 @@ export default {
 
         navigate(relPath) {
             this.currentPath = relPath;
-            this.selectedEntry = null;
+            this.selectedEntries = [];
+            this.lastClickedIdx = null;
             this.reload();
         },
 
@@ -220,7 +221,8 @@ export default {
         },
 
         reload() {
-            this.selectedEntry = null;
+            this.selectedEntries = [];
+            this.lastClickedIdx = null;
             this.loading = true;
             this.$root.emitAgent(this.endpoint, "minecraftFilelist", this.stackName, this.currentPath, (res) => {
                 this.loading = false;
@@ -230,6 +232,31 @@ export default {
                     this.$root.toastError(res.msg || "Failed to list files");
                 }
             });
+        },
+
+        isSelected(entry) {
+            return this.selectedEntries.some(e => e.name === entry.name);
+        },
+
+        handleRowClick(entry, idx, event) {
+            if (entry.isDir) {
+                this.navigate(this.joinPath(this.currentPath, entry.name));
+                return;
+            }
+
+            if (event.shiftKey && this.lastClickedIdx !== null) {
+                const start = Math.min(this.lastClickedIdx, idx);
+                const end = Math.max(this.lastClickedIdx, idx);
+                const rangeEntries = this.entries.slice(start, end + 1).filter(e => !e.isDir);
+                this.selectedEntries = rangeEntries;
+            } else {
+                if (this.isSelected(entry)) {
+                    this.selectedEntries = this.selectedEntries.filter(e => e.name !== entry.name);
+                } else {
+                    this.selectedEntries = [ entry ];
+                }
+                this.lastClickedIdx = idx;
+            }
         },
 
         isEditable(filename) {
@@ -256,39 +283,26 @@ export default {
             window.open(url, "_blank");
         },
 
-        startRename(entry) {
-            this.renamingEntry = entry.name;
-            this.renameValue = entry.name;
-        },
-
-        doRename(entry) {
-            if (!this.renameValue || this.renameValue === entry.name) {
-                this.renamingEntry = null;
+        async deleteSelected() {
+            if (this.selectedEntries.length === 0) {
                 return;
             }
-            const relPath = this.joinPath(this.currentPath, entry.name);
-            this.$root.emitAgent(this.endpoint, "minecraftFileRename", this.stackName, relPath, this.renameValue, (res) => {
-                this.renamingEntry = null;
-                if (res.ok) {
-                    this.reload();
-                } else {
-                    this.$root.toastError(res.msg || "Failed to rename");
-                }
-            });
-        },
-
-        deleteEntry(entry) {
-            if (!confirm(`Delete "${entry.name}"?`)) {
+            const names = this.selectedEntries.map(e => e.name).join(", ");
+            if (!confirm(`Delete "${names}"?`)) {
                 return;
             }
-            const relPath = this.joinPath(this.currentPath, entry.name);
-            this.$root.emitAgent(this.endpoint, "minecraftFileDelete", this.stackName, relPath, (res) => {
-                if (res.ok) {
-                    this.reload();
-                } else {
-                    this.$root.toastError(res.msg || "Failed to delete");
-                }
-            });
+            for (const entry of this.selectedEntries) {
+                const relPath = this.joinPath(this.currentPath, entry.name);
+                await new Promise(resolve => {
+                    this.$root.emitAgent(this.endpoint, "minecraftFileDelete", this.stackName, relPath, (res) => {
+                        if (!res.ok) {
+                            this.$root.toastError(res.msg || `Failed to delete ${entry.name}`);
+                        }
+                        resolve();
+                    });
+                });
+            }
+            this.reload();
         },
 
         mkdir() {
@@ -445,13 +459,6 @@ export default {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.mc-selection-bar {
-    background: $dark-header-bg;
-    border-radius: 6px;
-    padding: 4px 8px;
-    border: 1px solid $dark-border-color;
 }
 
 .breadcrumb {

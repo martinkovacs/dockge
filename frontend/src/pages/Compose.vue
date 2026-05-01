@@ -360,6 +360,7 @@ export default {
             newContainerName: "",
             stopServiceStatusTimeout: false,
             stopDockerStatsTimeout: false,
+            dockerStatsPending: false,
             minecraftViewMode: "auto",
         };
     },
@@ -502,6 +503,12 @@ export default {
             deep: true,
         },
 
+        "$root.lastTerminalExit"(val) {
+            if (val) {
+                this.onTerminalExit(val.name);
+            }
+        },
+
         $route(to, from) {
 
         }
@@ -545,10 +552,8 @@ export default {
 
         this.requestServiceStatus();
         this.requestDockerStats();
-        this.$root.socket.on("terminalExit", this.onTerminalExit);
     },
     unmounted() {
-        this.$root.socket.off("terminalExit", this.onTerminalExit);
         clearTimeout(this.progressTerminalExitTimeout);
     },
     methods: {
@@ -583,14 +588,19 @@ export default {
         },
 
         requestDockerStats() {
+            if (this.dockerStatsPending) {
+                return;
+            }
+            this.dockerStatsPending = true;
             this.$root.emitAgent(this.endpoint, "dockerStats", (res) => {
+                this.dockerStatsPending = false;
                 if (res.ok) {
                     this.dockerStats = res.dockerStats;
                 }
-                if (!this.stopDockerStatsTimeout) {
-                    this.startDockerStatsTimeout();
-                }
             });
+            if (!this.stopDockerStatsTimeout) {
+                this.startDockerStatsTimeout();
+            }
         },
 
         exitConfirm(next) {
@@ -705,6 +715,7 @@ export default {
 
         startStack() {
             this.processing = true;
+            this.bindTerminal();
 
             this.$root.emitAgent(this.endpoint, "startStack", this.stack.name, (res) => {
                 this.processing = false;
@@ -723,6 +734,7 @@ export default {
 
         downStack() {
             this.processing = true;
+            this.bindTerminal();
 
             this.$root.emitAgent(this.endpoint, "downStack", this.stack.name, (res) => {
                 this.processing = false;
@@ -732,6 +744,7 @@ export default {
 
         restartStack() {
             this.processing = true;
+            this.bindTerminal();
 
             this.$root.emitAgent(this.endpoint, "restartStack", this.stack.name, (res) => {
                 this.processing = false;
@@ -741,6 +754,7 @@ export default {
 
         updateStack() {
             this.processing = true;
+            this.bindTerminal();
 
             this.$root.emitAgent(this.endpoint, "updateStack", this.stack.name, (res) => {
                 this.processing = false;

@@ -77,6 +77,9 @@ export default {
                 general: {
                     title: this.$t("general"),
                 },
+                stacks: {
+                    title: "Stacks",
+                },
                 appearance: {
                     title: this.$t("Appearance"),
                 },
@@ -88,9 +91,6 @@ export default {
                 },
                 about: {
                     title: this.$t("About"),
-                },
-                stacks: {
-                    title: "Stacks",
                 },
             };
         },

@@ -1,62 +1,57 @@
 ############################################
-# Stage 1: Build Go healthcheck binary
+# Build Healthcheck Binary (Go)
 ############################################
-FROM golang:1.21-alpine AS build_healthcheck
+FROM golang:1.26-alpine AS build_healthcheck
 WORKDIR /app
+ARG TARGETPLATFORM
 COPY ./extra/healthcheck.go ./extra/healthcheck.go
-RUN go build -o ./extra/healthcheck ./extra/healthcheck.go
+RUN go build -x -o ./extra/healthcheck ./extra/healthcheck.go
 
 ############################################
-# Stage 2: Build frontend + production deps
-# esbuild and node-pty need a C++ toolchain.
-# After building the frontend, prune dev deps
-# so the same layer is reused in the final image.
+# Base (Node + Docker CLI)
 ############################################
-FROM node:22-bookworm-slim AS build
-WORKDIR /app
-RUN apt-get update && apt-get install --yes --no-install-recommends \
-        python3 make g++ \
-    && rm -rf /var/lib/apt/lists/*
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY . .
-RUN npm run build:frontend && npm prune --omit=dev
-
-############################################
-# Stage 3: Final release image
-############################################
-FROM node:22-bookworm-slim AS release
-
-# Install Docker CLI + compose plugin + dumb-init
-RUN apt-get update && apt-get install --yes --no-install-recommends \
-        curl \
-        ca-certificates \
-        gnupg \
-        dumb-init \
+FROM node:24-bookworm-slim AS base
+RUN apt update && apt install --yes --no-install-recommends \
+    curl \
+    ca-certificates \
+    gnupg \
+    unzip \
+    dumb-init \
     && install -m 0755 -d /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg \
-         | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
     && chmod a+r /etc/apt/keyrings/docker.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-         https://download.docker.com/linux/debian \
-         $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" \
-         | tee /etc/apt/sources.list.d/docker.list > /dev/null \
-    && apt-get update && apt-get install --yes --no-install-recommends \
+    && echo \
+         "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+         "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+         tee /etc/apt/sources.list.d/docker.list > /dev/null \
+    && apt update \
+    && apt --yes --no-install-recommends install \
          docker-ce-cli \
          docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g tsx
 
+############################################
+# Build (npm dependencies)
+############################################
+FROM base AS build
 WORKDIR /app
+COPY --chown=node:node ./package.json ./package.json
+COPY --chown=node:node ./package-lock.json ./package-lock.json
+RUN npm ci --omit=dev
 
+############################################
+# ⭐ Main Image
+############################################
+FROM base AS release
+WORKDIR /app
+COPY --chown=node:node --from=build_healthcheck /app/extra/healthcheck /app/extra/healthcheck
+COPY --from=build /app/node_modules /app/node_modules
 COPY --chown=node:node . .
-COPY --from=build_healthcheck /app/extra/healthcheck ./extra/healthcheck
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/frontend-dist ./frontend-dist
+RUN mkdir ./data
 
-RUN mkdir -p ./data
-
-# Disable io_uring to avoid node-pty issues on kernels that restrict it
+# Disable io_uring — causes issues with some Node.js native modules (e.g. node-pty)
+# https://github.com/sagemathinc/cocalc/issues/6963
 ENV UV_USE_IO_URING=0
 
 VOLUME /app/data

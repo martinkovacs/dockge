@@ -10,7 +10,6 @@
                     {{ $t("Select") }}
                 </button>
 
-                <div class="placeholder"></div>
                 <div class="search-wrapper">
                     <a v-if="searchText == ''" class="search-icon">
                         <font-awesome-icon icon="search" />
@@ -18,7 +17,7 @@
                     <a v-if="searchText != ''" class="search-icon" style="cursor: pointer" @click="clearSearchText">
                         <font-awesome-icon icon="times" />
                     </a>
-                    <form>
+                    <form class="flex-grow-1">
                         <input v-model="searchText" class="form-control search-input" autocomplete="off" />
                     </form>
                 </div>
@@ -436,6 +435,8 @@ export default {
 .search-wrapper {
     display: flex;
     align-items: center;
+    flex: 1;
+    width: 100%;
 }
 
 .search-icon {
@@ -454,7 +455,8 @@ export default {
 }
 
 .search-input {
-    max-width: 15em;
+    flex: 1;
+    width: 100%;
 }
 
 .stack-item {

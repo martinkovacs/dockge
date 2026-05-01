@@ -45,6 +45,8 @@ export default defineComponent({
             agentList: {
 
             },
+
+            lastTerminalExit: null as { name: string; exitCode: number } | null,
         };
     },
     computed: {
@@ -247,6 +249,11 @@ export default defineComponent({
                     return;
                 }
                 terminal.write(data);
+            });
+
+            agentSocket.on("terminalExit", (name, exitCode) => {
+                this.lastTerminalExit = { name: name as string,
+                    exitCode: exitCode as number };
             });
 
             agentSocket.on("stackList", (res) => {

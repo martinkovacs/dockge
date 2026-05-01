@@ -390,7 +390,6 @@ export default {
 .mc-terminal-wrap {
     flex: 1;
     min-height: 0;
-    height: 400px;
     background: #000 !important;
     border-radius: 6px;
     overflow: hidden;
@@ -435,11 +434,13 @@ export default {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    width: 280px;
+    width: 20%;
+    max-width: 420px;
     flex-shrink: 0;
 
-    @media (max-width: 1200px) {
+    @media (max-width: 900px) {
         width: 100%;
+        max-width: none;
         flex-direction: row;
         flex-wrap: wrap;
 

@@ -12,7 +12,7 @@
         <div v-else-if="stacks.length === 0" class="text-secondary">
             No stacks found.
         </div>
-        <table v-else class="table table-sm stacks-table">
+        <table v-else class="table table-sm table-dark stacks-table">
             <thead>
                 <tr>
                     <th>Stack</th>
@@ -139,15 +139,4 @@ export default {
     }
 }
 
-.btn-outline-secondary {
-    background: transparent;
-    color: $dark-font-color3;
-    border-color: $dark-border-color;
-
-    &:hover {
-        background: $dark-header-bg;
-        color: $dark-font-color;
-        border-color: $dark-border-color;
-    }
-}
 </style>
