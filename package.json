@@ -29,7 +29,7 @@
     "dependencies": {
         "@codemirror/lang-javascript": "^6.2.5",
         "@codemirror/lang-json": "^6.0.2",
-        "@homebridge/node-pty-prebuilt-multiarch": "0.11.14",
+        "@homebridge/node-pty-prebuilt-multiarch": "0.13.1",
         "@inventage/envsubst": "^0.16.0",
         "@louislam/sqlite3": "~15.1.6",
         "@types/archiver": "^7.0.0",
