@@ -1,0 +1,287 @@
+import { AgentSocketHandler } from "../agent-socket-handler";
+import { DockgeServer } from "../dockge-server";
+import { callbackError, callbackResult, checkLogin, DockgeSocket, ValidationError } from "../util-server";
+import { Stack } from "../stack";
+import { AgentSocket } from "../../common/agent-socket";
+import { Settings } from "../settings";
+import { InteractiveTerminal, Terminal } from "../terminal";
+import childProcessAsync from "promisify-child-process";
+import fs, { promises as fsAsync } from "fs";
+import path from "path";
+import { log } from "../log";
+import { TERMINAL_ROWS } from "../../common/util-common";
+
+const MINECRAFT_IMAGES = [ "itzg/minecraft-server", "itzg/mc-proxy" ];
+
+function getMinecraftAttachTerminalName(endpoint: string, stackName: string, serviceName: string): string {
+    return `minecraft-attach-${endpoint}-${stackName}-${serviceName}`;
+}
+
+function safePath(stackPath: string, relPath: string): string {
+    const resolved = path.resolve(stackPath, relPath);
+    if (!resolved.startsWith(path.resolve(stackPath))) {
+        throw new ValidationError("Path traversal detected");
+    }
+    return resolved;
+}
+
+export class MinecraftSocketHandler extends AgentSocketHandler {
+    create(socket: DockgeSocket, server: DockgeServer, agentSocket: AgentSocket) {
+
+        agentSocket.on("setStackMinecraftView", async (stackName: unknown, mode: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof mode !== "string" || ![ "auto", "on", "off" ].includes(mode)) {
+                    throw new ValidationError("Mode must be auto, on, or off");
+                }
+                await Settings.set(`minecraftView_${stackName}`, { mode }, "minecraft");
+                callbackResult({ ok: true }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("getStackMinecraftSettings", async (callback) => {
+            try {
+                checkLogin(socket);
+                const allSettings = await Settings.getSettings("minecraft");
+                callbackResult({ ok: true, settings: allSettings }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftAttach", async (stackName: unknown, serviceName: unknown, callback) => {
+            try {
+                checkLogin(socket);
+
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof serviceName !== "string") {
+                    throw new ValidationError("Service name must be a string");
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                const terminalName = getMinecraftAttachTerminalName(socket.endpoint, stackName, serviceName);
+
+                let terminal = Terminal.getTerminal(terminalName);
+
+                if (!terminal) {
+                    // Get container name from docker compose ps
+                    let containerName: string | null = null;
+                    try {
+                        const res = await childProcessAsync.spawn("docker", [ "compose", "ps", "--format", "json" ], {
+                            cwd: stack.path,
+                            encoding: "utf-8",
+                        });
+                        const stdout = res.stdout?.toString() ?? "";
+                        for (const line of stdout.split("\n")) {
+                            try {
+                                const obj = JSON.parse(line);
+                                const items = Array.isArray(obj) ? obj : [ obj ];
+                                for (const item of items) {
+                                    if (item.Service === serviceName || serviceName === "") {
+                                        containerName = item.Name;
+                                        break;
+                                    }
+                                }
+                                if (containerName) {
+                                    break;
+                                }
+                            } catch (_) { /* skip */ }
+                        }
+                    } catch (e) {
+                        log.warn("minecraftAttach", "Failed to get container name: " + e);
+                    }
+
+                    if (!containerName) {
+                        throw new ValidationError("Container not found or not running");
+                    }
+
+                    terminal = new InteractiveTerminal(server, terminalName, "docker", [ "attach", containerName ], stack.path);
+                    terminal.rows = TERMINAL_ROWS;
+                    terminal.enableKeepAlive = true;
+                }
+
+                terminal.join(socket);
+                terminal.start();
+
+                callbackResult({ ok: true, terminalName }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftFilelist", async (stackName: unknown, relPath: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof relPath !== "string") {
+                    throw new ValidationError("Path must be a string");
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                const targetPath = safePath(stack.path, relPath);
+
+                const rawEntries = await fsAsync.readdir(targetPath, { withFileTypes: true });
+                const entries = await Promise.all(rawEntries.map(async (entry) => {
+                    const entryPath = path.join(targetPath, entry.name);
+                    let size = 0;
+                    let mtime = 0;
+                    try {
+                        const stat = await fsAsync.stat(entryPath);
+                        size = stat.size;
+                        mtime = stat.mtimeMs;
+                    } catch (_) { /* skip */ }
+                    return {
+                        name: entry.name,
+                        isDir: entry.isDirectory(),
+                        size,
+                        mtime,
+                    };
+                }));
+
+                // Sort: dirs first, then files, alphabetically
+                entries.sort((a, b) => {
+                    if (a.isDir !== b.isDir) {
+                        return a.isDir ? -1 : 1;
+                    }
+                    return a.name.localeCompare(b.name);
+                });
+
+                callbackResult({ ok: true, entries }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftFileRead", async (stackName: unknown, relPath: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof relPath !== "string") {
+                    throw new ValidationError("Path must be a string");
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                const targetPath = safePath(stack.path, relPath);
+
+                const stat = await fsAsync.stat(targetPath);
+                if (stat.size > 5 * 1024 * 1024) {
+                    throw new ValidationError("File too large to edit (max 5MB)");
+                }
+
+                const content = await fsAsync.readFile(targetPath, "utf-8");
+                callbackResult({ ok: true, content }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftFileSave", async (stackName: unknown, relPath: unknown, content: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof relPath !== "string") {
+                    throw new ValidationError("Path must be a string");
+                }
+                if (typeof content !== "string") {
+                    throw new ValidationError("Content must be a string");
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                const targetPath = safePath(stack.path, relPath);
+
+                await fsAsync.writeFile(targetPath, content, "utf-8");
+                callbackResult({ ok: true }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftFileDelete", async (stackName: unknown, relPath: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof relPath !== "string") {
+                    throw new ValidationError("Path must be a string");
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                const targetPath = safePath(stack.path, relPath);
+
+                const stat = await fsAsync.stat(targetPath);
+                if (stat.isDirectory()) {
+                    await fsAsync.rm(targetPath, { recursive: true, force: true });
+                } else {
+                    await fsAsync.unlink(targetPath);
+                }
+                callbackResult({ ok: true }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftFileRename", async (stackName: unknown, relPath: unknown, newName: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof relPath !== "string") {
+                    throw new ValidationError("Path must be a string");
+                }
+                if (typeof newName !== "string") {
+                    throw new ValidationError("New name must be a string");
+                }
+                if (newName.includes("/") || newName.includes("\\") || newName === ".." || newName === ".") {
+                    throw new ValidationError("Invalid file name");
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                const targetPath = safePath(stack.path, relPath);
+                const newPath = path.join(path.dirname(targetPath), newName);
+
+                // Ensure the new path is still within the stack directory
+                safePath(stack.path, path.relative(stack.path, newPath));
+
+                await fsAsync.rename(targetPath, newPath);
+                callbackResult({ ok: true }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftFileMkdir", async (stackName: unknown, relPath: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof relPath !== "string") {
+                    throw new ValidationError("Path must be a string");
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                const targetPath = safePath(stack.path, relPath);
+
+                await fsAsync.mkdir(targetPath, { recursive: true });
+                callbackResult({ ok: true }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+    }
+}

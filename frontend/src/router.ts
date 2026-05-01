@@ -16,6 +16,7 @@ import General from "./components/settings/General.vue";
 const Security = () => import("./components/settings/Security.vue");
 const GlobalEnv = () => import("./components/settings/GlobalEnv.vue");
 import About from "./components/settings/About.vue";
+import Stacks from "./components/settings/Stacks.vue";
 
 const routes = [
     {
@@ -86,6 +87,10 @@ const routes = [
                             {
                                 path: "about",
                                 component: About,
+                            },
+                            {
+                                path: "stacks",
+                                component: Stacks,
                             },
                         ]
                     },

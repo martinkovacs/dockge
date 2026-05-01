@@ -81,7 +81,18 @@
                 ></Terminal>
             </transition>
 
-            <div v-if="stack.isManagedByDockge" class="row">
+            <!-- Minecraft Panel: replaces both columns -->
+            <div v-if="stack.isManagedByDockge && showMinecraftPanel && !isEditMode">
+                <MinecraftPanel
+                    :endpoint="endpoint"
+                    :stack-name="stack.name"
+                    :status="status"
+                    :docker-stats="dockerStats"
+                    :json-config="jsonConfig"
+                />
+            </div>
+
+            <div v-if="stack.isManagedByDockge && (!showMinecraftPanel || isEditMode)" class="row">
                 <div class="col-lg-6">
                     <!-- General -->
                     <div v-if="isAdd">
@@ -267,6 +278,7 @@ import { BModal } from "bootstrap-vue-next";
 import NetworkInput from "../components/NetworkInput.vue";
 import dotenv from "dotenv";
 import { ref } from "vue";
+import MinecraftPanel from "../components/minecraft/MinecraftPanel.vue";
 
 const template = `
 services:
@@ -283,12 +295,15 @@ let yamlErrorTimeout = null;
 let serviceStatusTimeout = null;
 let dockerStatsTimeout = null;
 
+const MINECRAFT_IMAGES = [ "itzg/minecraft-server", "itzg/mc-proxy" ];
+
 export default {
     components: {
         NetworkInput,
         FontAwesomeIcon,
         CodeMirror,
         BModal,
+        MinecraftPanel,
     },
     beforeRouteUpdate(to, from, next) {
         this.exitConfirm(next);
@@ -344,6 +359,7 @@ export default {
             newContainerName: "",
             stopServiceStatusTimeout: false,
             stopDockerStatsTimeout: false,
+            minecraftViewMode: "auto",
         };
     },
     computed: {
@@ -426,6 +442,23 @@ export default {
             } else {
                 return `/compose/${this.stack.name}`;
             }
+        },
+
+        isMinecraftStack() {
+            const services = this.jsonConfig?.services || {};
+            return Object.values(services).some(svc =>
+                MINECRAFT_IMAGES.some(img => (svc?.image || "").startsWith(img))
+            );
+        },
+
+        showMinecraftPanel() {
+            if (this.minecraftViewMode === "on") {
+                return true;
+            }
+            if (this.minecraftViewMode === "off") {
+                return false;
+            }
+            return this.isMinecraftStack;
         },
     },
     watch: {
@@ -592,6 +625,7 @@ export default {
             this.$root.emitAgent(this.endpoint, "getStack", this.stack.name, (res) => {
                 if (res.ok) {
                     this.stack = res.stack;
+                    this.minecraftViewMode = res.stack.minecraftViewMode || "auto";
                     this.yamlCodeChange();
                     this.processing = false;
                     this.bindTerminal();

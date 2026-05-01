@@ -69,12 +69,16 @@ export class Stack {
             }
         }
 
+        const minecraftSetting = await Settings.get(`minecraftView_${this.name}`);
+        const minecraftViewMode: string = minecraftSetting?.mode ?? "auto";
+
         let obj = this.toSimpleJSON(endpoint);
         return {
             ...obj,
             composeYAML: this.composeYAML,
             composeENV: this.composeENV,
             primaryHostname,
+            minecraftViewMode,
         };
     }
 
