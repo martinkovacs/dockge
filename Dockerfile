@@ -8,19 +8,25 @@ RUN go build -o ./extra/healthcheck ./extra/healthcheck.go
 
 ############################################
 # Stage 2: Build frontend
+# node-pty (and other native addons) are not needed for the Vite build,
+# so skip postinstall scripts to avoid needing a C++ toolchain here.
 ############################################
 FROM node:22-bookworm-slim AS build_frontend
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 COPY . .
 RUN npm run build:frontend
 
 ############################################
 # Stage 3: Install production dependencies
+# node-pty must be compiled, so install build tools first.
 ############################################
 FROM node:22-bookworm-slim AS build_deps
 WORKDIR /app
+RUN apt-get update && apt-get install --yes --no-install-recommends \
+        python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
