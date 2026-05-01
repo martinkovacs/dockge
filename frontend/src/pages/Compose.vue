@@ -345,6 +345,7 @@ export default {
             yamlError: "",
             processing: true,
             showProgressTerminal: false,
+            progressTerminalExitTimeout: null,
             progressTerminalRows: PROGRESS_TERMINAL_ROWS,
             combinedTerminalRows: COMBINED_TERMINAL_ROWS,
             combinedTerminalCols: COMBINED_TERMINAL_COLS,
@@ -544,9 +545,11 @@ export default {
 
         this.requestServiceStatus();
         this.requestDockerStats();
+        this.$root.socket.on("terminalExit", this.onTerminalExit);
     },
     unmounted() {
-
+        this.$root.socket.off("terminalExit", this.onTerminalExit);
+        clearTimeout(this.progressTerminalExitTimeout);
     },
     methods: {
         startServiceStatusTimeout() {
@@ -560,7 +563,7 @@ export default {
             clearTimeout(dockerStatsTimeout);
             dockerStatsTimeout = setTimeout(async () => {
                 this.requestDockerStats();
-            }, 5000);
+            }, this.showMinecraftPanel ? 1000 : 5000);
         },
 
         requestServiceStatus() {
@@ -604,15 +607,23 @@ export default {
             }
         },
 
+        onTerminalExit(name) {
+            if (name === this.terminalName) {
+                clearTimeout(this.progressTerminalExitTimeout);
+                this.progressTerminalExitTimeout = setTimeout(() => {
+                    this.showProgressTerminal = false;
+                }, 3000);
+            }
+        },
+
         exitAction() {
-            console.log("exitAction");
             this.stopServiceStatusTimeout = true;
             this.stopDockerStatsTimeout = true;
             clearTimeout(serviceStatusTimeout);
             clearTimeout(dockerStatsTimeout);
+            clearTimeout(this.progressTerminalExitTimeout);
 
             // Leave Combined Terminal
-            console.debug("leaveCombinedTerminal", this.endpoint, this.stack.name);
             this.$root.emitAgent(this.endpoint, "leaveCombinedTerminal", this.stack.name, () => {});
         },
 

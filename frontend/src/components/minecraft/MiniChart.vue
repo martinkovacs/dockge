@@ -73,6 +73,9 @@ export default {
 
     mounted() {
         this.createChart();
+        this.$nextTick(() => {
+            this.chart?.resize();
+        });
     },
 
     beforeUnmount() {
@@ -110,6 +113,9 @@ export default {
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
+                    layout: {
+                        padding: { bottom: 4 },
+                    },
                     plugins: {
                         legend: { display: false },
                         tooltip: { enabled: false },
@@ -118,8 +124,9 @@ export default {
                         x: { display: false },
                         y: {
                             display: false,
-                            min: 0,
+                            min: -0.5,
                             max: this.maxY ?? undefined,
+                            suggestedMax: this.maxY ?? 10,
                         },
                     },
                 },

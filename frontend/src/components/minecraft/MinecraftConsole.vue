@@ -1,36 +1,6 @@
 <template>
     <div class="mc-console">
-        <!-- Info cards row -->
-        <div class="mc-info-cards mb-3">
-            <div class="mc-card">
-                <div class="mc-card-label">Server</div>
-                <div class="mc-card-value">{{ stackName }}</div>
-            </div>
-            <div class="mc-card">
-                <div class="mc-card-label">Status</div>
-                <div class="mc-card-value">
-                    <span :class="statusClass">{{ statusText }}</span>
-                </div>
-            </div>
-            <div class="mc-card">
-                <div class="mc-card-label">Address</div>
-                <div class="mc-card-value address-val">{{ serverAddress }}</div>
-            </div>
-            <div class="mc-card">
-                <div class="mc-card-label">CPU</div>
-                <div class="mc-card-value">{{ cpuText }}</div>
-            </div>
-            <div class="mc-card">
-                <div class="mc-card-label">Memory</div>
-                <div class="mc-card-value">{{ memText }}</div>
-            </div>
-            <div class="mc-card">
-                <div class="mc-card-label">Disk I/O</div>
-                <div class="mc-card-value">{{ diskText }}</div>
-            </div>
-        </div>
-
-        <!-- Main content: wide layout puts charts to the right -->
+        <!-- Main content: terminal left, info+charts right -->
         <div class="mc-main-row">
             <!-- Left: terminal + command input -->
             <div class="mc-terminal-col">
@@ -70,8 +40,16 @@
                 </div>
             </div>
 
-            <!-- Right: charts -->
+            <!-- Right: status, address, charts -->
             <div class="mc-charts-col">
+                <div class="mc-info-block mb-2">
+                    <div class="mc-info-label">Status</div>
+                    <div class="mc-info-value">
+                        <span :class="statusClass">{{ statusText }}</span>
+                    </div>
+                    <div class="mc-info-label mt-2">Address</div>
+                    <div class="mc-info-value address-val">{{ serverAddress }}</div>
+                </div>
                 <MiniChart
                     label="CPU"
                     :datasets="cpuDatasets"
@@ -235,7 +213,8 @@ export default {
                 return "—";
             }
             const parts = this.mcStats.MemUsage.split(" / ");
-            return parts[0] || "—";
+            const pct = parseMemPercent(this.mcStats.MemUsage).toFixed(2);
+            return `${pct}% (${parts[0]} / ${parts[1]})`;
         },
 
         diskText() {
@@ -365,39 +344,31 @@ export default {
     gap: 0;
 }
 
-.mc-info-cards {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.mc-card {
+.mc-info-block {
     background: $dark-header-bg;
     border-radius: 8px;
-    padding: 10px 16px;
-    flex: 1;
-    min-width: 100px;
+    padding: 10px 14px;
+}
 
-    .mc-card-label {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: $dark-font-color3;
-        margin-bottom: 4px;
-    }
+.mc-info-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: $dark-font-color3;
+    margin-bottom: 2px;
+}
 
-    .mc-card-value {
-        font-size: 15px;
-        font-weight: 600;
-        color: $dark-font-color;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+.mc-info-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: $dark-font-color;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 
-        &.address-val {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
-        }
+    &.address-val {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
     }
 }
 

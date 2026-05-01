@@ -35,6 +35,19 @@
             </label>
         </div>
 
+        <!-- Selection action bar -->
+        <div v-if="selectedEntry && !selectedEntry.isDir" class="mc-selection-bar d-flex align-items-center gap-2 mb-2 px-1">
+            <span class="flex-grow-1 text-secondary" style="font-size: 13px;">{{ selectedEntry.name }}</span>
+            <button class="btn btn-sm btn-normal" @click="download(selectedEntry)">
+                <font-awesome-icon icon="download" class="me-1" />
+                Download
+            </button>
+            <button class="btn btn-sm btn-danger" @click="deleteEntry(selectedEntry); selectedEntry = null">
+                <font-awesome-icon icon="trash" class="me-1" />
+                Delete
+            </button>
+        </div>
+
         <!-- New folder prompt -->
         <div v-if="showMkdirPrompt" class="input-group mb-2">
             <input
@@ -71,7 +84,6 @@
                         <th>Name</th>
                         <th class="text-end">Size</th>
                         <th class="text-end">Modified</th>
-                        <th class="text-end">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -82,49 +94,27 @@
                             ..
                         </td>
                     </tr>
-                    <tr v-for="entry in entries" :key="entry.name" class="mc-file-row" @click.stop="entry.isDir ? navigate(joinPath(currentPath, entry.name)) : null">
+                    <tr
+                        v-for="entry in entries"
+                        :key="entry.name"
+                        class="mc-file-row"
+                        :class="{ selected: selectedEntry?.name === entry.name }"
+                        @click.stop="entry.isDir ? navigate(joinPath(currentPath, entry.name)) : (selectedEntry = selectedEntry?.name === entry.name ? null : entry)"
+                        @dblclick.stop="!entry.isDir ? editFile(entry) : null"
+                    >
                         <td class="mc-file-name">
                             <font-awesome-icon
                                 :icon="entry.isDir ? 'folder' : 'file'"
                                 class="me-2"
                                 :class="entry.isDir ? 'text-warning' : 'text-secondary'"
                             />
-                            <span v-if="renamingEntry === entry.name" class="d-inline-flex align-items-center gap-1" @click.stop>
-                                <input
-                                    v-model="renameValue"
-                                    class="form-control form-control-sm d-inline-block"
-                                    style="width: 200px"
-                                    @keyup.enter="doRename(entry)"
-                                    @keyup.escape="renamingEntry = null"
-                                />
-                                <button class="btn btn-sm btn-primary py-0" @click.stop="doRename(entry)">OK</button>
-                                <button class="btn btn-sm btn-normal py-0" @click.stop="renamingEntry = null">✕</button>
-                            </span>
-                            <span v-else>{{ entry.name }}</span>
+                            <span>{{ entry.name }}</span>
                         </td>
                         <td class="text-end text-secondary" style="white-space: nowrap">
                             {{ entry.isDir ? '—' : formatSize(entry.size) }}
                         </td>
                         <td class="text-end text-secondary" style="white-space: nowrap">
                             {{ formatDate(entry.mtime) }}
-                        </td>
-                        <td class="text-end" style="white-space: nowrap" @click.stop>
-                            <button
-                                v-if="!entry.isDir && isEditable(entry.name)"
-                                class="btn btn-xs btn-normal me-1"
-                                @click="editFile(entry)"
-                            >
-                                Edit
-                            </button>
-                            <button class="btn btn-xs btn-normal me-1" @click="download(entry)">
-                                <font-awesome-icon icon="download" />
-                            </button>
-                            <button class="btn btn-xs btn-normal me-1" @click="startRename(entry)">
-                                <font-awesome-icon icon="pen" />
-                            </button>
-                            <button class="btn btn-xs btn-danger" @click="deleteEntry(entry)">
-                                <font-awesome-icon icon="trash" />
-                            </button>
                         </td>
                     </tr>
                 </tbody>
@@ -190,6 +180,7 @@ export default {
             newFolderName: "",
             renamingEntry: null,
             renameValue: "",
+            selectedEntry: null,
         };
     },
 
@@ -217,6 +208,7 @@ export default {
 
         navigate(relPath) {
             this.currentPath = relPath;
+            this.selectedEntry = null;
             this.reload();
         },
 
@@ -228,6 +220,7 @@ export default {
         },
 
         reload() {
+            this.selectedEntry = null;
             this.loading = true;
             this.$root.emitAgent(this.endpoint, "minecraftFilelist", this.stackName, this.currentPath, (res) => {
                 this.loading = false;
@@ -437,6 +430,10 @@ export default {
             background: $dark-header-bg;
         }
 
+        &.selected {
+            background: rgba(116, 194, 255, 0.1);
+        }
+
         td {
             padding: 7px 8px;
         }
@@ -450,9 +447,11 @@ export default {
     white-space: nowrap;
 }
 
-.btn-xs {
-    font-size: 11px;
-    padding: 2px 7px;
+.mc-selection-bar {
+    background: $dark-header-bg;
+    border-radius: 6px;
+    padding: 4px 8px;
+    border: 1px solid $dark-border-color;
 }
 
 .breadcrumb {

@@ -138,4 +138,16 @@ export default {
         font-weight: 500;
     }
 }
+
+.btn-outline-secondary {
+    background: transparent;
+    color: $dark-font-color3;
+    border-color: $dark-border-color;
+
+    &:hover {
+        background: $dark-header-bg;
+        color: $dark-font-color;
+        border-color: $dark-border-color;
+    }
+}
 </style>

@@ -66,21 +66,19 @@
         </div>
         <div v-else-if="statsInstances.length > 0" class="mt-2">
             <div class="d-flex align-items-center gap-3">
-                <template v-if="!expandedStats">
-                    <div class="stats">
-                        {{ $t('CPU') }}: {{ statsInstances[0].CPUPerc }}
-                    </div>
-                    <div class="stats">
-                        {{ $t('memoryAbbreviated') }}: {{ statsInstances[0].MemUsage }}
-                    </div>
-                </template>
+                <div class="stats">
+                    {{ $t('CPU') }}: {{ statsInstances[0].CPUPerc }}
+                </div>
+                <div class="stats">
+                    {{ $t('memoryAbbreviated') }}: {{ statsInstances[0].MemUsage }}
+                </div>
                 <div class="d-flex flex-grow-1 justify-content-end">
                     <button class="btn btn-sm btn-normal" @click="expandedStats = !expandedStats">
                         <font-awesome-icon :icon="expandedStats ? 'chevron-up' : 'chevron-down'" />
                     </button>
                 </div>
             </div>
-            <transition name="slide-fade" appear>
+            <transition name="slide-fade">
                 <div v-if="expandedStats" class="d-flex flex-column gap-3 mt-2">
                     <DockerStat
                         v-for="stat in statsInstances"
@@ -91,7 +89,7 @@
             </transition>
         </div>
 
-        <transition name="slide-fade" appear>
+        <transition name="slide-fade">
             <div v-if="isEditMode && showConfig" class="config mt-3">
                 <!-- Image -->
                 <div class="mb-4">

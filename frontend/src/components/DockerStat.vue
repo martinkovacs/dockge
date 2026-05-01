@@ -24,17 +24,15 @@
                 <div class="stat-label">
                     {{ $t('networkIO') }}
                 </div>
-                <div>
-                    {{ stat.NetIO }}
-                </div>
+                <div>{{ stat.NetIO }}</div>
+                <div class="stat-hint">since container start</div>
             </div>
             <div class="stat">
                 <div class="stat-label">
                     {{ $t('blockIO') }}
                 </div>
-                <div>
-                    {{ stat.BlockIO }}
-                </div>
+                <div>{{ stat.BlockIO }}</div>
+                <div class="stat-hint">since container start</div>
             </div>
         </div>
     </div>
@@ -85,6 +83,12 @@ export default {
 
 .stat-label {
     font-weight: bold;
+}
+
+.stat-hint {
+    font-size: 0.7rem;
+    color: #6c757d;
+    margin-top: 1px;
 }
 
 .stats-title {

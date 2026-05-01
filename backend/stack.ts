@@ -33,6 +33,8 @@ export class Stack {
     protected combinedTerminal? : Terminal;
 
     protected static managedStackList: Map<string, Stack> = new Map();
+    private static composeStatusCache: { Name: string; Status: string; ConfigFiles: string }[] = [];
+    private static composeStatusCacheTs = 0;
 
     constructor(server : DockgeServer, name : string, composeYAML? : string, composeENV? : string, skipFSOperations = false) {
         this.name = name;
@@ -302,16 +304,23 @@ export class Stack {
             this.managedStackList = new Map(stackList);
         }
 
-        // Get status from docker compose ls
-        let res = await childProcessAsync.spawn("docker", [ "compose", "ls", "--all", "--format", "json" ], {
-            encoding: "utf-8",
-        });
-
-        if (!res.stdout) {
-            return stackList;
+        // Get status from docker compose ls (cached to avoid running every 10 s from the cron)
+        type ComposeEntry = { Name: string; Status: string; ConfigFiles: string };
+        let composeList: ComposeEntry[];
+        if (useCacheForManaged && Stack.composeStatusCacheTs > 0
+                && Date.now() - Stack.composeStatusCacheTs < 10_000) {
+            composeList = Stack.composeStatusCache;
+        } else {
+            let res = await childProcessAsync.spawn("docker", [ "compose", "ls", "--all", "--format", "json" ], {
+                encoding: "utf-8",
+            });
+            if (!res.stdout) {
+                return stackList;
+            }
+            composeList = JSON.parse(res.stdout.toString()) as ComposeEntry[];
+            Stack.composeStatusCache = composeList;
+            Stack.composeStatusCacheTs = Date.now();
         }
-
-        let composeList = JSON.parse(res.stdout.toString());
 
         for (let composeStack of composeList) {
             let stack = stackList.get(composeStack.Name);
@@ -418,7 +427,6 @@ export class Stack {
             }
             options.splice(1, 0, "--env-file", "../global.env");
         }
-        console.log(options);
         return options;
     }
 

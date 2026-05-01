@@ -653,13 +653,22 @@ export class DockgeServer {
                 return stats;
             }
 
-            let lines = res.stdout?.toString().split("\n");
-
-            for (let line of lines) {
+            const raw = res.stdout.toString().trim();
+            try {
+                const arr = JSON.parse(raw);
+                if (Array.isArray(arr)) {
+                    for (const obj of arr) {
+                        stats.set(obj.Name, obj);
+                    }
+                    return stats;
+                }
+            } catch (_) {
+            }
+            for (const line of raw.split("\n")) {
                 try {
-                    let obj = JSON.parse(line);
+                    const obj = JSON.parse(line);
                     stats.set(obj.Name, obj);
-                } catch (e) {
+                } catch (_) {
                 }
             }
 

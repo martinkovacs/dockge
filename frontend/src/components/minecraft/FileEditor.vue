@@ -2,13 +2,18 @@
     <BModal
         v-model="show"
         size="xl"
-        :title="filePath"
+        centered
+        :title="dirPath || filePath"
         :ok-title="saving ? 'Saving...' : 'Save'"
         cancel-title="Cancel"
         :ok-disabled="saving"
         @ok.prevent="save"
         @hidden="$emit('close')"
     >
+        <div class="mb-2">
+            <label class="form-label filename-label">Filename</label>
+            <input v-model="fileName" class="form-control form-control-sm font-mono" />
+        </div>
         <div class="editor-box">
             <code-mirror
                 v-model="localContent"
@@ -77,6 +82,7 @@ export default {
             show: true,
             localContent: this.content,
             saving: false,
+            fileName: this.filePath.split("/").pop(),
         };
     },
 
@@ -84,27 +90,62 @@ export default {
         extensions() {
             return extensionsForFile(this.filePath);
         },
+        dirPath() {
+            const parts = this.filePath.split("/");
+            parts.pop();
+            return parts.join("/") || "";
+        },
     },
 
     methods: {
         save() {
             this.saving = true;
-            this.$root.emitAgent(this.endpoint, "minecraftFileSave", this.stackName, this.filePath, this.localContent, (res) => {
-                this.saving = false;
-                if (res.ok) {
-                    this.$root.toastSuccess("File saved");
-                    this.$emit("saved");
-                    this.show = false;
-                } else {
-                    this.$root.toastError(res.msg || "Failed to save");
-                }
-            });
+            const originalName = this.filePath.split("/").pop();
+            const nameChanged = this.fileName !== originalName;
+            const newPath = this.dirPath ? `${this.dirPath}/${this.fileName}` : this.fileName;
+
+            const doSave = (savePath) => {
+                this.$root.emitAgent(this.endpoint, "minecraftFileSave", this.stackName, savePath, this.localContent, (res) => {
+                    this.saving = false;
+                    if (res.ok) {
+                        this.$root.toastSuccess("File saved");
+                        this.$emit("saved");
+                        this.show = false;
+                    } else {
+                        this.$root.toastError(res.msg || "Failed to save");
+                    }
+                });
+            };
+
+            if (nameChanged) {
+                this.$root.emitAgent(this.endpoint, "minecraftFileRename", this.stackName, this.filePath, this.fileName, (res) => {
+                    if (res.ok) {
+                        doSave(newPath);
+                    } else {
+                        this.saving = false;
+                        this.$root.toastError(res.msg || "Failed to rename");
+                    }
+                });
+            } else {
+                doSave(this.filePath);
+            }
         },
     },
 };
 </script>
 
 <style scoped lang="scss">
+.filename-label {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 4px;
+}
+
+.font-mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+}
+
 .editor-box {
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
