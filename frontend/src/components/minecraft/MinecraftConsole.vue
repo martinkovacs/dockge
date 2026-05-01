@@ -156,6 +156,8 @@ export default {
             default: () => ({}) },
         jsonConfig: { type: Object,
             default: () => ({}) },
+        pollIntervalMs: { type: Number,
+            default: 5000 },
     },
 
     data() {
@@ -317,7 +319,7 @@ export default {
             this.cpuHistory = [ ...this.cpuHistory.slice(1), cpu ];
             this.memHistory = [ ...this.memHistory.slice(1), mem ];
 
-            const intervalSec = 5;
+            const intervalSec = Math.max(0.001, this.pollIntervalMs / 1000);
             let rxRate = 0;
             let txRate = 0;
             if (this.prevNetRx !== null) {

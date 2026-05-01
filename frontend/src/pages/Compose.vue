@@ -89,6 +89,7 @@
                     :status="status"
                     :docker-stats="dockerStats"
                     :json-config="jsonConfig"
+                    :poll-interval-ms="1000"
                 />
             </div>
 
@@ -361,6 +362,7 @@ export default {
             stopServiceStatusTimeout: false,
             stopDockerStatsTimeout: false,
             dockerStatsPending: false,
+            dockerStatsPendingSince: 0,
             minecraftViewMode: "auto",
         };
     },
@@ -588,19 +590,25 @@ export default {
         },
 
         requestDockerStats() {
-            if (this.dockerStatsPending) {
-                return;
-            }
-            this.dockerStatsPending = true;
-            this.$root.emitAgent(this.endpoint, "dockerStats", (res) => {
-                this.dockerStatsPending = false;
-                if (res.ok) {
-                    this.dockerStats = res.dockerStats;
-                }
-            });
             if (!this.stopDockerStatsTimeout) {
                 this.startDockerStatsTimeout();
             }
+            const pollInterval = this.showMinecraftPanel ? 1000 : 5000;
+            const stale = this.dockerStatsPending
+                && this.dockerStatsPendingSince
+                && (Date.now() - this.dockerStatsPendingSince) > pollInterval * 2;
+            if (this.dockerStatsPending && !stale) {
+                return;
+            }
+            this.dockerStatsPending = true;
+            this.dockerStatsPendingSince = Date.now();
+            this.$root.emitAgent(this.endpoint, "dockerStats", (res) => {
+                this.dockerStatsPending = false;
+                this.dockerStatsPendingSince = 0;
+                if (res && res.ok) {
+                    this.dockerStats = res.dockerStats;
+                }
+            });
         },
 
         exitConfirm(next) {

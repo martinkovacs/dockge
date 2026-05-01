@@ -37,6 +37,7 @@ export default {
     data() {
         return {
             chart: null,
+            resizeObserver: null,
         };
     },
 
@@ -76,9 +77,20 @@ export default {
         this.$nextTick(() => {
             this.chart?.resize();
         });
+        const wrap = this.$refs.canvas?.parentElement;
+        if (wrap && typeof ResizeObserver !== "undefined") {
+            this.resizeObserver = new ResizeObserver(() => {
+                this.chart?.resize();
+            });
+            this.resizeObserver.observe(wrap);
+        }
     },
 
     beforeUnmount() {
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+        }
         if (this.chart) {
             this.chart.destroy();
         }

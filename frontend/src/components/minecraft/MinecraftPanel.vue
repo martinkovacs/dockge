@@ -36,6 +36,7 @@
                 :status="status"
                 :docker-stats="dockerStats"
                 :json-config="jsonConfig"
+                :poll-interval-ms="pollIntervalMs"
             />
             <MinecraftFiles
                 v-if="activeTab === 'files'"
@@ -69,6 +70,8 @@ export default {
             default: () => ({}) },
         jsonConfig: { type: Object,
             default: () => ({}) },
+        pollIntervalMs: { type: Number,
+            default: 5000 },
     },
 
     data() {
