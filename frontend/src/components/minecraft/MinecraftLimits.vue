@@ -8,16 +8,16 @@
         </div>
 
         <div class="mc-limits-grid">
-            <!-- JVM Memory -->
+            <!-- JVM Limits -->
             <div class="mc-limit-card">
                 <div class="mc-limit-card-title">
                     <font-awesome-icon icon="cube" class="me-2 text-primary" />
-                    JVM Memory
+                    JVM Limits
                 </div>
                 <div class="mc-limit-row-grid">
                     <div class="mc-limit-row">
                         <label>
-                            -Xms <span class="mc-limit-envname">(INIT_MEMORY)</span>
+                            Xms <span class="mc-limit-envname">(INIT_MEMORY)</span>
                         </label>
                         <input
                             v-model="form.initMemory"
@@ -28,7 +28,7 @@
                     </div>
                     <div class="mc-limit-row">
                         <label>
-                            -Xmx <span class="mc-limit-envname">(MAX_MEMORY)</span>
+                            Xmx <span class="mc-limit-envname">(MAX_MEMORY)</span>
                         </label>
                         <input
                             v-model="form.maxMemory"
@@ -40,58 +40,54 @@
                 </div>
             </div>
 
-            <!-- CPU -->
+            <!-- Docker Limits -->
             <div class="mc-limit-card">
                 <div class="mc-limit-card-title">
                     <font-awesome-icon icon="microchip" class="me-2 text-primary" />
-                    CPU
+                    Docker Limits
                 </div>
                 <div class="mc-limit-row-grid">
-                    <div class="mc-limit-row">
-                        <label>Limit (cores)</label>
-                        <input
-                            v-model="form.cpuLimit"
-                            type="text"
-                            class="form-control form-control-sm"
-                            placeholder="e.g. 2 or 1.5"
-                        />
+                    <div class="mc-limit-subsection">
+                        <div class="mc-limit-subsection-title">CPU</div>
+                        <div class="mc-limit-row">
+                            <label>Limit (cores)</label>
+                            <input
+                                v-model="form.cpuLimit"
+                                type="text"
+                                class="form-control form-control-sm"
+                                placeholder="e.g. 2 or 1.5"
+                            />
+                        </div>
+                        <div class="mc-limit-row">
+                            <label>Reservation (cores)</label>
+                            <input
+                                v-model="form.cpuReservation"
+                                type="text"
+                                class="form-control form-control-sm"
+                                placeholder="e.g. 0.5"
+                            />
+                        </div>
                     </div>
-                    <div class="mc-limit-row">
-                        <label>Reservation (cores)</label>
-                        <input
-                            v-model="form.cpuReservation"
-                            type="text"
-                            class="form-control form-control-sm"
-                            placeholder="e.g. 0.5"
-                        />
-                    </div>
-                </div>
-            </div>
-
-            <!-- Memory -->
-            <div class="mc-limit-card">
-                <div class="mc-limit-card-title">
-                    <font-awesome-icon icon="memory" class="me-2 text-primary" />
-                    Memory
-                </div>
-                <div class="mc-limit-row-grid">
-                    <div class="mc-limit-row">
-                        <label>Limit</label>
-                        <input
-                            v-model="form.memLimit"
-                            type="text"
-                            class="form-control form-control-sm"
-                            placeholder="e.g. 2G or 512M"
-                        />
-                    </div>
-                    <div class="mc-limit-row">
-                        <label>Reservation</label>
-                        <input
-                            v-model="form.memReservation"
-                            type="text"
-                            class="form-control form-control-sm"
-                            placeholder="e.g. 256M"
-                        />
+                    <div class="mc-limit-subsection">
+                        <div class="mc-limit-subsection-title">Memory</div>
+                        <div class="mc-limit-row">
+                            <label>Limit</label>
+                            <input
+                                v-model="form.memLimit"
+                                type="text"
+                                class="form-control form-control-sm"
+                                placeholder="e.g. 2G or 512M"
+                            />
+                        </div>
+                        <div class="mc-limit-row">
+                            <label>Reservation</label>
+                            <input
+                                v-model="form.memReservation"
+                                type="text"
+                                class="form-control form-control-sm"
+                                placeholder="e.g. 256M"
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -232,6 +228,20 @@ export default {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 10px 14px;
+}
+
+.mc-limit-subsection {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mc-limit-subsection-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: $dark-font-color3;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 .mc-limit-envname {

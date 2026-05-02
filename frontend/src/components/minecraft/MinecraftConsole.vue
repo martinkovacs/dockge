@@ -58,11 +58,15 @@
                             class="mc-limits-section"
                         >
                             <div class="mc-limits-section-title">{{ section.title }}</div>
-                            <div class="mc-limits-section-rows">
-                                <template v-for="row in section.rows" :key="row.label">
-                                    <span class="mc-limits-section-label">{{ row.label }}</span>
-                                    <span class="mc-limits-section-value">{{ row.value }}</span>
-                                </template>
+                            <div class="mc-limits-section-row">
+                                <div
+                                    v-for="pair in section.pairs"
+                                    :key="pair.label"
+                                    class="mc-limits-pair"
+                                >
+                                    <span class="mc-limits-section-label">{{ pair.label }}</span>
+                                    <span class="mc-limits-section-value">{{ pair.value }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -220,16 +224,16 @@ export default {
             const sections = [];
             const jvm = [];
             if (this.jvmMemory.initMemory) {
-                jvm.push({ label: "-Xms",
+                jvm.push({ label: "Xms",
                     value: this.jvmMemory.initMemory });
             }
             if (this.jvmMemory.maxMemory) {
-                jvm.push({ label: "-Xmx",
+                jvm.push({ label: "Xmx",
                     value: this.jvmMemory.maxMemory });
             }
             if (jvm.length) {
                 sections.push({ title: "JVM",
-                    rows: jvm });
+                    pairs: jvm });
             }
 
             const limits = [];
@@ -243,7 +247,7 @@ export default {
             }
             if (limits.length) {
                 sections.push({ title: "Limits",
-                    rows: limits });
+                    pairs: limits });
             }
 
             const reservations = [];
@@ -257,7 +261,7 @@ export default {
             }
             if (reservations.length) {
                 sections.push({ title: "Reservations",
-                    rows: reservations });
+                    pairs: reservations });
             }
 
             return sections;
@@ -496,11 +500,19 @@ export default {
     line-height: 1.2;
 }
 
-.mc-limits-section-rows {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0 8px;
+.mc-limits-section-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+}
+
+.mc-limits-pair {
+    display: flex;
     align-items: baseline;
+    gap: 4px;
+    min-width: 0;
+    flex: 1 1 0;
 }
 
 .mc-limits-section-label {
@@ -516,7 +528,6 @@ export default {
     color: $dark-font-color;
     font-family: 'JetBrains Mono', monospace;
     line-height: 1.3;
-    text-align: right;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
