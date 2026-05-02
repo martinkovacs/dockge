@@ -274,11 +274,23 @@ export default {
             if (val) {
                 this.attach();
             } else {
-                if (this.terminalName) {
-                    this.$root.emitAgent(this.endpoint, "leaveCombinedTerminal", this.stackName, () => {});
-                }
                 this.terminalName = "";
                 this.attaching = false;
+            }
+        },
+
+        // The PTY exits when the container stops/restarts. If it matches our
+        // terminal, drop the stale name; the isRunning watcher (or this watcher
+        // racing it on a fast restart) will re-attach when the container is
+        // back up.
+        "$root.lastTerminalExit"(exit) {
+            if (!exit || !this.terminalName || exit.name !== this.terminalName) {
+                return;
+            }
+            this.terminalName = "";
+            this.attaching = false;
+            if (this.isRunning) {
+                this.$nextTick(() => this.attach());
             }
         },
     },
@@ -289,16 +301,9 @@ export default {
         }
     },
 
-    beforeUnmount() {
-        // Leave the terminal so the PTY can be garbage collected
-        if (this.terminalName) {
-            this.$root.emitAgent(this.endpoint, "leaveCombinedTerminal", this.stackName, () => {});
-        }
-    },
-
     methods: {
         attach() {
-            if (this.attaching) {
+            if (this.terminalName || this.attaching) {
                 return;
             }
             this.attaching = true;
@@ -307,7 +312,9 @@ export default {
                 if (res.ok) {
                     this.terminalName = res.terminalName;
                 } else {
-                    this.$root.toastError(res.msg || "Failed to connect to server console");
+                    // Container may not be back up yet on a fast restart.
+                    // Don't toast — isRunning will re-trigger us.
+                    this.terminalName = "";
                 }
             });
         },
@@ -410,11 +417,31 @@ export default {
 .mc-terminal-wrap {
     flex: 1;
     min-height: 0;
-    background: #000 !important;
+    background: #000;
     border-radius: 6px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+
+    // The shared Terminal component wraps itself in .shadow-box (10px padding
+    // + dark-bg in dark mode). For the Minecraft console we want the xterm
+    // flush to our rounded black wrap, so neutralise it.
+    :deep(.shadow-box) {
+        padding: 0;
+        background: transparent !important;
+        box-shadow: none;
+        border-radius: 6px;
+        height: 100%;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    :deep(.main-terminal) {
+        flex: 1;
+        height: 100%;
+        min-height: 0;
+    }
 }
 
 .mc-terminal-offline {

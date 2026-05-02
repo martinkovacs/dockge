@@ -366,58 +366,57 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                     throw new ValidationError(`Service ${serviceName} not found in compose`);
                 }
 
-                const svcBase = [ "services", serviceName ];
-
-                // Ensure every intermediate node along `pathArr` (relative to
-                // services.<svc>) is a YAML map. Without this, doc.setIn fails
-                // with "Expected YAML collection at X" when an existing key is
-                // a scalar (e.g. `reservations:` with no value).
-                const ensureMap = (pathArr: string[]) => {
-                    for (let i = 1; i <= pathArr.length; i++) {
-                        const sub = [ ...svcBase, ...pathArr.slice(0, i) ];
-                        const existing = doc.getIn(sub);
-                        if (!existing || !YAML.isMap(existing)) {
-                            doc.setIn(sub, new YAML.YAMLMap());
-                        }
+                // Walk the YAML tree directly via YAMLMap.set/.delete instead
+                // of doc.setIn — that fails with "Expected YAML collection at
+                // X" when an intermediate key already exists as a scalar
+                // (e.g. `reservations:` with no value), and silently inserts
+                // plain JS objects rather than YAMLMap nodes.
+                const ensureMapAt = (parent: YAML.YAMLMap, key: string): YAML.YAMLMap => {
+                    const existing = parent.get(key, true);
+                    if (existing instanceof YAML.YAMLMap) {
+                        return existing;
                     }
+                    const m = new YAML.YAMLMap();
+                    parent.set(key, m);
+                    return m;
                 };
 
-                const setIn = (pathArr: string[], value: unknown) => {
-                    const fullPath = [ ...svcBase, ...pathArr ];
+                const setOrDel = (parent: YAML.YAMLMap, key: string, value: string | null) => {
                     if (value === null || value === undefined || value === "") {
-                        doc.deleteIn(fullPath);
-                        return;
+                        parent.delete(key);
+                    } else {
+                        parent.set(key, value);
                     }
-                    if (pathArr.length > 1) {
-                        ensureMap(pathArr.slice(0, -1));
-                    }
-                    doc.setIn(fullPath, value);
                 };
 
-                // Resources block (deploy.resources.{limits,reservations}).
                 const cpuLimit = l.cpuLimit as string | number | null | undefined;
                 const memLimit = l.memLimit as string | null | undefined;
                 const cpuRes = l.cpuReservation as string | number | null | undefined;
                 const memRes = l.memReservation as string | null | undefined;
 
-                setIn([ "deploy", "resources", "limits", "cpus" ], cpuLimit ? String(cpuLimit) : null);
-                setIn([ "deploy", "resources", "limits", "memory" ], memLimit || null);
-                setIn([ "deploy", "resources", "reservations", "cpus" ], cpuRes ? String(cpuRes) : null);
-                setIn([ "deploy", "resources", "reservations", "memory" ], memRes || null);
+                const deploy = ensureMapAt(svc, "deploy");
+                const resources = ensureMapAt(deploy, "resources");
+                const limitsMap = ensureMapAt(resources, "limits");
+                const reservationsMap = ensureMapAt(resources, "reservations");
 
-                // Drop empty parent maps so we don't leave behind
-                // `reservations: {}` / `deploy: {}` etc.
-                const cleanupPaths: string[][] = [
-                    [ "deploy", "resources", "limits" ],
-                    [ "deploy", "resources", "reservations" ],
-                    [ "deploy", "resources" ],
-                    [ "deploy" ],
-                ];
-                for (const p of cleanupPaths) {
-                    const node = doc.getIn([ ...svcBase, ...p ]);
-                    if (YAML.isMap(node) && node.items.length === 0) {
-                        doc.deleteIn([ ...svcBase, ...p ]);
-                    }
+                setOrDel(limitsMap, "cpus", cpuLimit ? String(cpuLimit) : null);
+                setOrDel(limitsMap, "memory", memLimit || null);
+                setOrDel(reservationsMap, "cpus", cpuRes ? String(cpuRes) : null);
+                setOrDel(reservationsMap, "memory", memRes || null);
+
+                // Prune empty parents so we don't leave behind `reservations: {}`
+                // / `deploy: {}` etc.
+                if (limitsMap.items.length === 0) {
+                    resources.delete("limits");
+                }
+                if (reservationsMap.items.length === 0) {
+                    resources.delete("reservations");
+                }
+                if (resources.items.length === 0) {
+                    deploy.delete("resources");
+                }
+                if (deploy.items.length === 0) {
+                    svc.delete("deploy");
                 }
 
                 await fsAsync.writeFile(actualPath, doc.toString(), "utf-8");

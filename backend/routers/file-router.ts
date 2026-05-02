@@ -228,7 +228,11 @@ export class FileRouter extends Router {
                 // Ensure directory exists
                 await fsAsync.mkdir(targetDir, { recursive: true });
 
-                const bb = busboy({ headers: req.headers });
+                // Browsers send filenames as UTF-8 without a charset
+                // declaration; busboy defaults to latin1 and would mojibake
+                // accented characters.
+                const bb = busboy({ headers: req.headers,
+                    defParamCharset: "utf8" });
                 const writes: Promise<void>[] = [];
 
                 bb.on("file", (_field, file, info) => {

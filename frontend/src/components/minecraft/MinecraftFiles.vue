@@ -263,11 +263,16 @@ export default {
         this.reload();
         window.addEventListener("keydown", this.onKeyDown);
         window.addEventListener("scroll", this.closeContextMenu, true);
+        window.addEventListener("popstate", this.onPopState);
+        // Replace (not push) so the file browser's root state owns the
+        // current history entry — no extra entry left behind on close.
+        history.replaceState({ mcFilesPath: "" }, "");
     },
 
     beforeUnmount() {
         window.removeEventListener("keydown", this.onKeyDown);
         window.removeEventListener("scroll", this.closeContextMenu, true);
+        window.removeEventListener("popstate", this.onPopState);
     },
 
     methods: {
@@ -275,10 +280,13 @@ export default {
             return parts.filter(Boolean).join("/");
         },
 
-        navigate(relPath) {
+        navigate(relPath, fromHistory = false) {
             this.currentPath = relPath;
             this.selectedEntries = [];
             this.lastClickedIdx = null;
+            if (!fromHistory) {
+                history.pushState({ mcFilesPath: relPath }, "");
+            }
             this.reload();
         },
 
@@ -286,6 +294,15 @@ export default {
             const parts = this.currentPath.split("/").filter(Boolean);
             parts.pop();
             this.navigate(parts.join("/"));
+        },
+
+        onPopState(e) {
+            const state = e.state;
+            if (state && typeof state.mcFilesPath === "string") {
+                // Navigate to the path the back button restored, without
+                // pushing a new history entry on top of it.
+                this.navigate(state.mcFilesPath, true);
+            }
         },
 
         reload() {

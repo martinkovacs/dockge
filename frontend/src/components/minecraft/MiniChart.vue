@@ -215,6 +215,8 @@ export default {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    flex: 1;
+    min-height: 0;
 }
 
 .mini-chart-label {
@@ -242,7 +244,8 @@ export default {
 }
 
 .mini-chart-canvas-wrap {
-    height: 60px;
+    flex: 1;
+    min-height: 60px;
     position: relative;
 }
 </style>
