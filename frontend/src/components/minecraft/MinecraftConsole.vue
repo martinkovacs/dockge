@@ -278,26 +278,17 @@ export default {
                 this.attaching = false;
             }
         },
-
-        // The PTY exits when the container stops/restarts. If it matches our
-        // terminal, drop the stale name; the isRunning watcher (or this watcher
-        // racing it on a fast restart) will re-attach when the container is
-        // back up.
-        "$root.lastTerminalExit"(exit) {
-            if (!exit || !this.terminalName || exit.name !== this.terminalName) {
-                return;
-            }
-            this.terminalName = "";
-            this.attaching = false;
-            if (this.isRunning) {
-                this.$nextTick(() => this.attach());
-            }
-        },
     },
 
     mounted() {
         if (this.isRunning) {
             this.attach();
+        }
+    },
+
+    beforeUnmount() {
+        if (this.terminalName) {
+            this.$root.emitAgent(this.endpoint, "leaveCombinedTerminal", this.stackName, () => {});
         }
     },
 
@@ -312,9 +303,7 @@ export default {
                 if (res.ok) {
                     this.terminalName = res.terminalName;
                 } else {
-                    // Container may not be back up yet on a fast restart.
-                    // Don't toast — isRunning will re-trigger us.
-                    this.terminalName = "";
+                    this.$root.toastError(res.msg || "Failed to connect to server console");
                 }
             });
         },
