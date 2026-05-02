@@ -9,7 +9,7 @@
 
         <div class="mc-limits-grid">
             <!-- JVM Memory -->
-            <div class="mc-limit-card mc-limit-card-wide">
+            <div class="mc-limit-card">
                 <div class="mc-limit-card-title">
                     <font-awesome-icon icon="cube" class="me-2 text-primary" />
                     JVM Memory
@@ -46,23 +46,25 @@
                     <font-awesome-icon icon="microchip" class="me-2 text-primary" />
                     CPU
                 </div>
-                <div class="mc-limit-row">
-                    <label>Limit (cores)</label>
-                    <input
-                        v-model="form.cpuLimit"
-                        type="text"
-                        class="form-control form-control-sm"
-                        placeholder="e.g. 2 or 1.5"
-                    />
-                </div>
-                <div class="mc-limit-row">
-                    <label>Reservation (cores)</label>
-                    <input
-                        v-model="form.cpuReservation"
-                        type="text"
-                        class="form-control form-control-sm"
-                        placeholder="e.g. 0.5"
-                    />
+                <div class="mc-limit-row-grid">
+                    <div class="mc-limit-row">
+                        <label>Limit (cores)</label>
+                        <input
+                            v-model="form.cpuLimit"
+                            type="text"
+                            class="form-control form-control-sm"
+                            placeholder="e.g. 2 or 1.5"
+                        />
+                    </div>
+                    <div class="mc-limit-row">
+                        <label>Reservation (cores)</label>
+                        <input
+                            v-model="form.cpuReservation"
+                            type="text"
+                            class="form-control form-control-sm"
+                            placeholder="e.g. 0.5"
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -72,23 +74,25 @@
                     <font-awesome-icon icon="memory" class="me-2 text-primary" />
                     Memory
                 </div>
-                <div class="mc-limit-row">
-                    <label>Limit</label>
-                    <input
-                        v-model="form.memLimit"
-                        type="text"
-                        class="form-control form-control-sm"
-                        placeholder="e.g. 2G or 512M"
-                    />
-                </div>
-                <div class="mc-limit-row">
-                    <label>Reservation</label>
-                    <input
-                        v-model="form.memReservation"
-                        type="text"
-                        class="form-control form-control-sm"
-                        placeholder="e.g. 256M"
-                    />
+                <div class="mc-limit-row-grid">
+                    <div class="mc-limit-row">
+                        <label>Limit</label>
+                        <input
+                            v-model="form.memLimit"
+                            type="text"
+                            class="form-control form-control-sm"
+                            placeholder="e.g. 2G or 512M"
+                        />
+                    </div>
+                    <div class="mc-limit-row">
+                        <label>Reservation</label>
+                        <input
+                            v-model="form.memReservation"
+                            type="text"
+                            class="form-control form-control-sm"
+                            placeholder="e.g. 256M"
+                        />
+                    </div>
                 </div>
             </div>
         </div>
@@ -219,13 +223,9 @@ export default {
 }
 
 .mc-limits-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 14px;
-}
-
-.mc-limit-card-wide {
-    grid-column: 1 / -1;
 }
 
 .mc-limit-row-grid {

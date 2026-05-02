@@ -51,19 +51,20 @@
                         <div class="mc-info-label mt-2">Address</div>
                         <div class="mc-info-value address-val">{{ serverAddress }}</div>
                     </div>
-                    <div class="mc-info-col mc-info-col-limits">
-                        <div class="mc-info-label">CPU limit</div>
-                        <div class="mc-info-value">{{ resourceLimits.cpuLimit || "—" }}</div>
-                        <div class="mc-info-label mt-2">Mem limit</div>
-                        <div class="mc-info-value">{{ resourceLimits.memLimit || "—" }}</div>
-                        <div class="mc-info-label mt-2">
-                            -Xms <span class="mc-info-envname">(INIT_MEMORY)</span>
+                    <div v-if="limitSections.length" class="mc-info-col mc-info-col-limits">
+                        <div
+                            v-for="section in limitSections"
+                            :key="section.title"
+                            class="mc-limits-section"
+                        >
+                            <div class="mc-limits-section-title">{{ section.title }}</div>
+                            <div class="mc-limits-section-rows">
+                                <template v-for="row in section.rows" :key="row.label">
+                                    <span class="mc-limits-section-label">{{ row.label }}</span>
+                                    <span class="mc-limits-section-value">{{ row.value }}</span>
+                                </template>
+                            </div>
                         </div>
-                        <div class="mc-info-value">{{ jvmMemory.initMemory || "—" }}</div>
-                        <div class="mc-info-label mt-2">
-                            -Xmx <span class="mc-info-envname">(MAX_MEMORY)</span>
-                        </div>
-                        <div class="mc-info-value">{{ jvmMemory.maxMemory || "—" }}</div>
                     </div>
                 </div>
                 <MiniChart
@@ -213,6 +214,53 @@ export default {
 
         jvmMemory() {
             return readJvmMemory(this.jsonConfig, this.serviceName);
+        },
+
+        limitSections() {
+            const sections = [];
+            const jvm = [];
+            if (this.jvmMemory.initMemory) {
+                jvm.push({ label: "-Xms",
+                    value: this.jvmMemory.initMemory });
+            }
+            if (this.jvmMemory.maxMemory) {
+                jvm.push({ label: "-Xmx",
+                    value: this.jvmMemory.maxMemory });
+            }
+            if (jvm.length) {
+                sections.push({ title: "JVM",
+                    rows: jvm });
+            }
+
+            const limits = [];
+            if (this.resourceLimits.cpuLimit) {
+                limits.push({ label: "CPU",
+                    value: this.resourceLimits.cpuLimit });
+            }
+            if (this.resourceLimits.memLimit) {
+                limits.push({ label: "Mem",
+                    value: this.resourceLimits.memLimit });
+            }
+            if (limits.length) {
+                sections.push({ title: "Limits",
+                    rows: limits });
+            }
+
+            const reservations = [];
+            if (this.resourceLimits.cpuReservation) {
+                reservations.push({ label: "CPU",
+                    value: this.resourceLimits.cpuReservation });
+            }
+            if (this.resourceLimits.memReservation) {
+                reservations.push({ label: "Mem",
+                    value: this.resourceLimits.memReservation });
+            }
+            if (reservations.length) {
+                sections.push({ title: "Reservations",
+                    rows: reservations });
+            }
+
+            return sections;
         },
 
         serverAddress() {
@@ -434,14 +482,44 @@ export default {
 .mc-info-col-limits {
     border-left: 1px solid rgba(255, 255, 255, 0.06);
     padding-left: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
-.mc-info-envname {
+.mc-limits-section-title {
     font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: $dark-font-color3;
+    margin-bottom: 1px;
+    line-height: 1.2;
+}
+
+.mc-limits-section-rows {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0 8px;
+    align-items: baseline;
+}
+
+.mc-limits-section-label {
+    font-size: 11px;
     color: $dark-font-color3;
     font-family: 'JetBrains Mono', monospace;
-    text-transform: none;
-    letter-spacing: 0;
+    line-height: 1.3;
+}
+
+.mc-limits-section-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: $dark-font-color;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.3;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 @media (max-width: 1100px) {

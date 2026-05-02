@@ -53,6 +53,24 @@ function niceCeil(value) {
     return nice * base;
 }
 
+// Round `value` up to the next multiple of `step`.
+function ceilToStep(value, step) {
+    return Math.ceil(value / step) * step;
+}
+
+// Y-axis ceiling for axes that can grow above their nominal max (currently
+// just CPU%). Steps in 25 up to 500, 50 up to 1000, 100 beyond — keeps
+// small overshoots (e.g. 101%) from doubling the axis to 200.
+function growStepCeil(value) {
+    if (value <= 500) {
+        return ceilToStep(value, 25);
+    }
+    if (value <= 1000) {
+        return ceilToStep(value, 50);
+    }
+    return ceilToStep(value, 100);
+}
+
 export default {
     components: { LineChart },
 
@@ -145,20 +163,27 @@ export default {
             //  * maxY set, peak > maxY → only honour the cap when
             //    allowGrowAboveMax is false; otherwise grow to ~110% of peak.
             let rawMax;
+            let useGrowStep = false;
             if (this.maxY == null) {
                 rawMax = Math.max(10, peak * 1.15);
             } else if (peak > this.maxY && this.allowGrowAboveMax) {
-                rawMax = peak * 1.1;
+                rawMax = peak;
+                useGrowStep = true;
             } else {
                 rawMax = this.maxY;
             }
             // Hard-capped axes (e.g. memory at 100%) keep their nominal max so
-            // the gridlines line up at 0/50/100. Otherwise round up to a nice
-            // number so the two ticks at yMax/2 and yMax always land on round
-            // values and are equally spaced.
-            const yMax = (this.maxY != null && rawMax === this.maxY)
-                ? this.maxY
-                : niceCeil(rawMax);
+            // the gridlines line up at 0/50/100. CPU-style growable axes use
+            // fixed absolute steps (25/50/100) for predictable scaling.
+            // Everything else rounds up to a nice multiplier.
+            let yMax;
+            if (this.maxY != null && rawMax === this.maxY) {
+                yMax = this.maxY;
+            } else if (useGrowStep) {
+                yMax = growStepCeil(rawMax);
+            } else {
+                yMax = niceCeil(rawMax);
+            }
             const stepSize = yMax / 2;
             const unit = this.unit;
 
