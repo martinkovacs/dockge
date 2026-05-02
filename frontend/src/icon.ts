@@ -66,6 +66,7 @@ import {
     faMemory,
     faFileZipper,
     faICursor,
+    faPowerOff,
 } from "@fortawesome/free-solid-svg-icons";
 
 library.add(
@@ -133,6 +134,7 @@ library.add(
     faMemory,
     faFileZipper,
     faICursor,
+    faPowerOff,
 );
 
 export { FontAwesomeIcon };

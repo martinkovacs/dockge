@@ -1,5 +1,13 @@
 <template>
-    <div class="mc-files" @click="closeContextMenu">
+    <div
+        class="mc-files"
+        @click="closeContextMenu"
+        @contextmenu.prevent="onBgContextMenu($event)"
+        @dragenter.prevent="onDragEnter"
+        @dragleave.prevent="onDragLeave"
+        @dragover.prevent
+        @drop.prevent="handleDrop"
+    >
         <!-- Toolbar -->
         <div class="mc-files-toolbar d-flex align-items-center gap-2 mb-2">
             <!-- Breadcrumb -->
@@ -33,10 +41,6 @@
         <div
             class="mc-files-drop-zone"
             :class="{ 'dragging': isDragging }"
-            @dragover.prevent="isDragging = true"
-            @dragleave="isDragging = false"
-            @drop.prevent="handleDrop"
-            @contextmenu.prevent="onBgContextMenu($event)"
         >
             <!-- File list -->
             <div v-if="loading" class="text-center py-4 text-secondary">
@@ -224,6 +228,7 @@ export default {
             loading: false,
             uploading: false,
             isDragging: false,
+            dragCounter: 0,
             editingFile: null,
             editingContent: "",
             selectedEntries: [],
@@ -357,11 +362,46 @@ export default {
             });
         },
 
+        authToken() {
+            const storage = this.$root.storage?.();
+            return (storage && storage.token) || this.$root.socketIO?.token || "";
+        },
+
+        async downloadUrl(url, suggestedName) {
+            try {
+                const res = await fetch(url, {
+                    headers: { "Authorization": `Bearer ${this.authToken()}` },
+                });
+                if (!res.ok) {
+                    let msg = `Download failed (${res.status})`;
+                    try {
+                        const json = await res.json();
+                        if (json && json.msg) {
+                            msg = json.msg;
+                        }
+                    } catch (_) { /* not JSON */ }
+                    this.$root.toastError(msg);
+                    return;
+                }
+                const blob = await res.blob();
+                const objectUrl = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = objectUrl;
+                a.download = suggestedName;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+            } catch (e) {
+                this.$root.toastError("Download failed: " + e.message);
+            }
+        },
+
         download(entry) {
             const relPath = this.joinPath(this.currentPath, entry.name);
-            const token = this.$root.socketIO.token || "";
-            const url = `/api/files/${encodeURIComponent(this.stackName)}/${relPath}?token=${encodeURIComponent(token)}`;
-            window.open(url, "_blank");
+            const url = `/api/files/${encodeURIComponent(this.stackName)}/${relPath}`;
+            const suggested = entry.isDir ? `${entry.name}.zip` : entry.name;
+            this.downloadUrl(url, suggested);
         },
 
         downloadSelected() {
@@ -372,14 +412,12 @@ export default {
                 this.download(this.selectedEntries[0]);
                 return;
             }
-            const token = this.$root.socketIO.token || "";
             const params = new URLSearchParams();
-            params.set("token", token);
             for (const entry of this.selectedEntries) {
                 params.append("paths", this.joinPath(this.currentPath, entry.name));
             }
             const url = `/api/files-zip/${encodeURIComponent(this.stackName)}?${params.toString()}`;
-            window.open(url, "_blank");
+            this.downloadUrl(url, `${this.stackName}.zip`);
         },
 
         async deleteSelected() {
@@ -587,7 +625,6 @@ export default {
                 return;
             }
             this.uploading = true;
-            const token = this.$root.socketIO.token || "";
             const uploadPath = this.currentPath ? `${this.currentPath}/` : "";
             const url = `/api/files/${encodeURIComponent(this.stackName)}/${uploadPath}`;
             const formData = new FormData();
@@ -597,7 +634,7 @@ export default {
             try {
                 const res = await fetch(url, {
                     method: "POST",
-                    headers: { "Authorization": `Bearer ${token}` },
+                    headers: { "Authorization": `Bearer ${this.authToken()}` },
                     body: formData,
                 });
                 const json = await res.json();
@@ -621,9 +658,31 @@ export default {
         },
 
         handleDrop(e) {
+            this.dragCounter = 0;
             this.isDragging = false;
+            if (!e.dataTransfer || !e.dataTransfer.files || e.dataTransfer.files.length === 0) {
+                return;
+            }
             const files = Array.from(e.dataTransfer.files);
             this.uploadFiles(files);
+        },
+
+        onDragEnter(e) {
+            // Only react to OS file drags, not internal text/element drags.
+            if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes("Files")) {
+                return;
+            }
+            this.dragCounter++;
+            this.isDragging = true;
+        },
+
+        onDragLeave() {
+            if (this.dragCounter > 0) {
+                this.dragCounter--;
+            }
+            if (this.dragCounter === 0) {
+                this.isDragging = false;
+            }
         },
 
         formatSize(bytes) {

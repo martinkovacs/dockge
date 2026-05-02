@@ -4,7 +4,7 @@
         <div class="mc-main-row">
             <!-- Left: terminal + command input -->
             <div class="mc-terminal-col">
-                <div class="mc-terminal-wrap shadow-box">
+                <div class="mc-terminal-wrap">
                     <Terminal
                         v-if="terminalName"
                         ref="mcTerminal"
@@ -274,6 +274,9 @@ export default {
             if (val) {
                 this.attach();
             } else {
+                if (this.terminalName) {
+                    this.$root.emitAgent(this.endpoint, "leaveCombinedTerminal", this.stackName, () => {});
+                }
                 this.terminalName = "";
                 this.attaching = false;
             }
@@ -295,7 +298,7 @@ export default {
 
     methods: {
         attach() {
-            if (this.terminalName || this.attaching) {
+            if (this.attaching) {
                 return;
             }
             this.attaching = true;

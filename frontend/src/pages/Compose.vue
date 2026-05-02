@@ -47,7 +47,7 @@
                     </button>
 
                     <button v-if="!isEditMode" class="btn btn-normal" :disabled="processing" @click="downStack">
-                        <font-awesome-icon icon="stop" class="me-1" />
+                        <font-awesome-icon icon="power-off" class="me-1" />
                         {{ $t("downStack") }}
                     </button>
                 </div>

@@ -366,12 +366,32 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                     throw new ValidationError(`Service ${serviceName} not found in compose`);
                 }
 
-                const setIn = (pathArr: string[], value: unknown) => {
-                    if (value === null || value === undefined || value === "") {
-                        doc.deleteIn([ "services", serviceName, ...pathArr ]);
-                    } else {
-                        doc.setIn([ "services", serviceName, ...pathArr ], value);
+                const svcBase = [ "services", serviceName ];
+
+                // Ensure every intermediate node along `pathArr` (relative to
+                // services.<svc>) is a YAML map. Without this, doc.setIn fails
+                // with "Expected YAML collection at X" when an existing key is
+                // a scalar (e.g. `reservations:` with no value).
+                const ensureMap = (pathArr: string[]) => {
+                    for (let i = 1; i <= pathArr.length; i++) {
+                        const sub = [ ...svcBase, ...pathArr.slice(0, i) ];
+                        const existing = doc.getIn(sub);
+                        if (!existing || !YAML.isMap(existing)) {
+                            doc.setIn(sub, new YAML.YAMLMap());
+                        }
                     }
+                };
+
+                const setIn = (pathArr: string[], value: unknown) => {
+                    const fullPath = [ ...svcBase, ...pathArr ];
+                    if (value === null || value === undefined || value === "") {
+                        doc.deleteIn(fullPath);
+                        return;
+                    }
+                    if (pathArr.length > 1) {
+                        ensureMap(pathArr.slice(0, -1));
+                    }
+                    doc.setIn(fullPath, value);
                 };
 
                 // Resources block (deploy.resources.{limits,reservations}).
@@ -384,6 +404,21 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                 setIn([ "deploy", "resources", "limits", "memory" ], memLimit || null);
                 setIn([ "deploy", "resources", "reservations", "cpus" ], cpuRes ? String(cpuRes) : null);
                 setIn([ "deploy", "resources", "reservations", "memory" ], memRes || null);
+
+                // Drop empty parent maps so we don't leave behind
+                // `reservations: {}` / `deploy: {}` etc.
+                const cleanupPaths: string[][] = [
+                    [ "deploy", "resources", "limits" ],
+                    [ "deploy", "resources", "reservations" ],
+                    [ "deploy", "resources" ],
+                    [ "deploy" ],
+                ];
+                for (const p of cleanupPaths) {
+                    const node = doc.getIn([ ...svcBase, ...p ]);
+                    if (YAML.isMap(node) && node.items.length === 0) {
+                        doc.deleteIn([ ...svcBase, ...p ]);
+                    }
+                }
 
                 await fsAsync.writeFile(actualPath, doc.toString(), "utf-8");
                 callbackResult({ ok: true }, callback);

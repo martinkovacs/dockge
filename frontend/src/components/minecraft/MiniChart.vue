@@ -29,6 +29,30 @@ import {
 
 ChartJS.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler);
 
+// Round `value` up to a "nice" number (1, 2, 2.5, 5, 10) × 10^n so the
+// y-axis can be split into evenly-spaced ticks ending on a round number.
+function niceCeil(value) {
+    if (value <= 0) {
+        return 10;
+    }
+    const exp = Math.floor(Math.log10(value));
+    const base = Math.pow(10, exp);
+    const m = value / base;
+    let nice;
+    if (m <= 1) {
+        nice = 1;
+    } else if (m <= 2) {
+        nice = 2;
+    } else if (m <= 2.5) {
+        nice = 2.5;
+    } else if (m <= 5) {
+        nice = 5;
+    } else {
+        nice = 10;
+    }
+    return nice * base;
+}
+
 export default {
     components: { LineChart },
 
@@ -120,14 +144,22 @@ export default {
             //  * maxY set, peak <= maxY → cap at maxY.
             //  * maxY set, peak > maxY → only honour the cap when
             //    allowGrowAboveMax is false; otherwise grow to ~110% of peak.
-            let yMax;
+            let rawMax;
             if (this.maxY == null) {
-                yMax = Math.max(10, peak * 1.15);
+                rawMax = Math.max(10, peak * 1.15);
             } else if (peak > this.maxY && this.allowGrowAboveMax) {
-                yMax = peak * 1.1;
+                rawMax = peak * 1.1;
             } else {
-                yMax = this.maxY;
+                rawMax = this.maxY;
             }
+            // Hard-capped axes (e.g. memory at 100%) keep their nominal max so
+            // the gridlines line up at 0/50/100. Otherwise round up to a nice
+            // number so the two ticks at yMax/2 and yMax always land on round
+            // values and are equally spaced.
+            const yMax = (this.maxY != null && rawMax === this.maxY)
+                ? this.maxY
+                : niceCeil(rawMax);
+            const stepSize = yMax / 2;
             const unit = this.unit;
 
             return {
@@ -155,7 +187,7 @@ export default {
                             drawTicks: false,
                         },
                         ticks: {
-                            maxTicksLimit: 3,
+                            stepSize,
                             font: { size: 9 },
                             color: "#888",
                             padding: 2,
