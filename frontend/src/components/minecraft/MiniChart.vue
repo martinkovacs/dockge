@@ -1,19 +1,37 @@
 <template>
     <div class="mini-chart-wrapper">
         <div class="mini-chart-label">{{ label }}</div>
-        <div class="mini-chart-value">{{ currentValue }}</div>
+        <div class="mini-chart-value">
+            <span>{{ currentValue }}</span>
+            <span v-if="subValue" class="mini-chart-sub">{{ subValue }}</span>
+        </div>
         <div class="mini-chart-canvas-wrap">
-            <canvas ref="canvas"></canvas>
+            <LineChart
+                v-if="hasData"
+                :data="chartData"
+                :options="chartOptions"
+            />
         </div>
     </div>
 </template>
 
 <script>
-import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler } from "chart.js";
+import { Line as LineChart } from "vue-chartjs";
+import {
+    Chart as ChartJS,
+    LineController,
+    LineElement,
+    PointElement,
+    LinearScale,
+    CategoryScale,
+    Filler,
+} from "chart.js";
 
-Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler);
+ChartJS.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler);
 
 export default {
+    components: { LineChart },
+
     props: {
         label: {
             type: String,
@@ -32,16 +50,17 @@ export default {
             type: Number,
             default: null,
         },
-    },
-
-    data() {
-        return {
-            chart: null,
-            resizeObserver: null,
-        };
+        subValue: {
+            type: String,
+            default: "",
+        },
     },
 
     computed: {
+        hasData() {
+            return this.datasets.some(ds => ds.data && ds.data.length > 0);
+        },
+
         currentValue() {
             if (!this.datasets.length) {
                 return "—";
@@ -61,112 +80,59 @@ export default {
                 return `${ds.label}: ${v.toFixed(1)} ${this.unit}`;
             }).join("  ");
         },
-    },
 
-    watch: {
-        datasets: {
-            deep: true,
-            handler() {
-                this.updateChart();
-            },
-        },
-    },
-
-    mounted() {
-        this.createChart();
-        this.$nextTick(() => {
-            this.chart?.resize();
-        });
-        const wrap = this.$refs.canvas?.parentElement;
-        if (wrap && typeof ResizeObserver !== "undefined") {
-            this.resizeObserver = new ResizeObserver(() => {
-                this.chart?.resize();
-            });
-            this.resizeObserver.observe(wrap);
-        }
-    },
-
-    beforeUnmount() {
-        if (this.resizeObserver) {
-            this.resizeObserver.disconnect();
-            this.resizeObserver = null;
-        }
-        if (this.chart) {
-            this.chart.destroy();
-        }
-    },
-
-    methods: {
-        buildChartDatasets() {
-            return this.datasets.map(ds => ({
-                label: ds.label,
-                data: [ ...ds.data ],
-                borderColor: ds.color,
-                backgroundColor: ds.color + "33",
-                fill: true,
-                tension: 0.4,
-                pointRadius: 0,
-                borderWidth: 2,
-            }));
+        chartLength() {
+            return this.datasets[0]?.data.length || 60;
         },
 
-        createChart() {
-            const ctx = this.$refs.canvas.getContext("2d");
-            const length = this.datasets[0]?.data.length || 60;
-            const labels = Array(length).fill("");
+        chartData() {
+            const labels = Array(this.chartLength).fill("");
+            return {
+                labels,
+                datasets: this.datasets.map(ds => ({
+                    label: ds.label,
+                    data: [ ...ds.data ],
+                    borderColor: ds.color,
+                    backgroundColor: ds.color + "33",
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    borderWidth: 2,
+                })),
+            };
+        },
 
-            this.chart = new Chart(ctx, {
-                type: "line",
-                data: {
-                    labels,
-                    datasets: this.buildChartDatasets(),
+        chartOptions() {
+            // Pick a suggestedMax slightly above the highest value so the line
+            // never touches the top edge (was the source of the "cropped top").
+            const peak = Math.max(
+                0,
+                ...this.datasets.flatMap(ds => ds.data || []),
+            );
+            const suggestedMax = this.maxY ?? Math.max(10, peak * 1.15);
+
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                layout: {
+                    padding: { top: 4,
+                        bottom: 2 },
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: false,
-                    layout: {
-                        padding: { bottom: 4 },
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: { enabled: false },
-                    },
-                    scales: {
-                        x: { display: false },
-                        y: {
-                            display: false,
-                            min: -0.5,
-                            max: this.maxY ?? undefined,
-                            suggestedMax: this.maxY ?? 10,
-                        },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false },
+                },
+                scales: {
+                    x: { display: false },
+                    y: {
+                        display: false,
+                        min: 0,
+                        max: this.maxY ?? undefined,
+                        suggestedMax,
                     },
                 },
-            });
-        },
-
-        updateChart() {
-            if (!this.chart) {
-                return;
-            }
-            const newDatasets = this.buildChartDatasets();
-            const length = newDatasets[0]?.data.length || 60;
-            this.chart.data.labels = Array(length).fill("");
-            this.chart.data.datasets.forEach((ds, i) => {
-                if (newDatasets[i]) {
-                    ds.data = newDatasets[i].data;
-                    ds.borderColor = newDatasets[i].borderColor;
-                    ds.backgroundColor = newDatasets[i].backgroundColor;
-                }
-            });
-            // Add or remove datasets if count changed
-            while (this.chart.data.datasets.length < newDatasets.length) {
-                this.chart.data.datasets.push(newDatasets[this.chart.data.datasets.length]);
-            }
-            while (this.chart.data.datasets.length > newDatasets.length) {
-                this.chart.data.datasets.pop();
-            }
-            this.chart.update();
+            };
         },
     },
 };
@@ -196,6 +162,16 @@ export default {
     font-weight: 600;
     color: $dark-font-color;
     min-height: 20px;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.mini-chart-sub {
+    font-size: 12px;
+    font-weight: 400;
+    color: $dark-font-color3;
+    font-family: 'JetBrains Mono', monospace;
 }
 
 .mini-chart-canvas-wrap {

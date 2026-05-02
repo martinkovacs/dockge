@@ -82,7 +82,7 @@
             </transition>
 
             <!-- Minecraft Panel: replaces both columns -->
-            <div v-if="stack.isManagedByDockge && showMinecraftPanel && !isEditMode">
+            <div v-if="stack.isManagedByDockge && showMinecraftPanel && !isEditMode" class="mc-panel-wrap">
                 <MinecraftPanel
                     :endpoint="endpoint"
                     :stack-name="stack.name"
@@ -294,7 +294,9 @@ const envDefault = "# VARIABLE=value #comment";
 let yamlErrorTimeout = null;
 
 let serviceStatusTimeout = null;
-let dockerStatsTimeout = null;
+let dockerStatsInterval = null;
+let dockerStatsReqId = 0;
+let dockerStatsAppliedId = 0;
 
 const MINECRAFT_IMAGES = [ "itzg/minecraft-server", "itzg/mc-proxy" ];
 
@@ -361,8 +363,6 @@ export default {
             newContainerName: "",
             stopServiceStatusTimeout: false,
             stopDockerStatsTimeout: false,
-            dockerStatsPending: false,
-            dockerStatsPendingSince: 0,
             minecraftViewMode: "auto",
         };
     },
@@ -466,6 +466,13 @@ export default {
         },
     },
     watch: {
+        showMinecraftPanel() {
+            // Poll rate differs (1s vs 5s) — restart the pipeline at the new rate.
+            if (dockerStatsInterval && !this.stopDockerStatsTimeout) {
+                this.startDockerStatsPolling();
+            }
+        },
+
         "stack.composeYAML": {
             handler() {
                 if (this.editorFocus) {
@@ -566,11 +573,38 @@ export default {
             }, 5000);
         },
 
-        startDockerStatsTimeout() {
-            clearTimeout(dockerStatsTimeout);
-            dockerStatsTimeout = setTimeout(async () => {
-                this.requestDockerStats();
-            }, this.showMinecraftPanel ? 1000 : 5000);
+        startDockerStatsPolling() {
+            this.stopDockerStatsPolling();
+            const intervalMs = this.showMinecraftPanel ? 1000 : 5000;
+            // Pipelined: fire every tick regardless of whether a previous
+            // request is still in flight. Out-of-order responses are dropped
+            // via the monotonically-increasing reqId tracked in the callback.
+            dockerStatsInterval = setInterval(() => {
+                this.fireDockerStatsRequest();
+            }, intervalMs);
+        },
+
+        stopDockerStatsPolling() {
+            if (dockerStatsInterval) {
+                clearInterval(dockerStatsInterval);
+                dockerStatsInterval = null;
+            }
+        },
+
+        fireDockerStatsRequest() {
+            if (this.isAdd) {
+                return;
+            }
+            const myId = ++dockerStatsReqId;
+            this.$root.emitAgent(this.endpoint, "dockerStats", (res) => {
+                if (myId <= dockerStatsAppliedId) {
+                    return; // stale response, a newer one already applied
+                }
+                if (res && res.ok) {
+                    dockerStatsAppliedId = myId;
+                    this.dockerStats = res.dockerStats;
+                }
+            });
         },
 
         requestServiceStatus() {
@@ -590,25 +624,11 @@ export default {
         },
 
         requestDockerStats() {
-            if (!this.stopDockerStatsTimeout) {
-                this.startDockerStatsTimeout();
+            // Kick off the recurring pipeline; fire one immediately too.
+            if (!this.stopDockerStatsTimeout && !dockerStatsInterval) {
+                this.startDockerStatsPolling();
             }
-            const pollInterval = this.showMinecraftPanel ? 1000 : 5000;
-            const stale = this.dockerStatsPending
-                && this.dockerStatsPendingSince
-                && (Date.now() - this.dockerStatsPendingSince) > pollInterval * 2;
-            if (this.dockerStatsPending && !stale) {
-                return;
-            }
-            this.dockerStatsPending = true;
-            this.dockerStatsPendingSince = Date.now();
-            this.$root.emitAgent(this.endpoint, "dockerStats", (res) => {
-                this.dockerStatsPending = false;
-                this.dockerStatsPendingSince = 0;
-                if (res && res.ok) {
-                    this.dockerStats = res.dockerStats;
-                }
-            });
+            this.fireDockerStatsRequest();
         },
 
         exitConfirm(next) {
@@ -630,7 +650,7 @@ export default {
                 clearTimeout(this.progressTerminalExitTimeout);
                 this.progressTerminalExitTimeout = setTimeout(() => {
                     this.showProgressTerminal = false;
-                }, 3000);
+                }, 400);
             }
         },
 
@@ -638,7 +658,7 @@ export default {
             this.stopServiceStatusTimeout = true;
             this.stopDockerStatsTimeout = true;
             clearTimeout(serviceStatusTimeout);
-            clearTimeout(dockerStatsTimeout);
+            this.stopDockerStatsPolling();
             clearTimeout(this.progressTerminalExitTimeout);
 
             // Leave Combined Terminal
@@ -928,5 +948,13 @@ export default {
 .agent-name {
     font-size: 13px;
     color: $dark-font-color3;
+}
+
+.mc-panel-wrap {
+    // Fill the viewport so the Minecraft panel (terminal + charts/files)
+    // expands to use all available vertical space by default.
+    min-height: calc(100vh - 220px);
+    display: flex;
+    flex-direction: column;
 }
 </style>

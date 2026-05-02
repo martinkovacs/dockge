@@ -12,7 +12,7 @@
         <div v-else-if="stacks.length === 0" class="text-secondary">
             No stacks found.
         </div>
-        <table v-else class="table table-sm table-dark stacks-table">
+        <table v-else class="stacks-table">
             <thead>
                 <tr>
                     <th>Stack</th>
@@ -131,11 +131,39 @@ export default {
 @import "../../styles/vars.scss";
 
 .stacks-table {
-    font-size: 13px;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    background: transparent;
+
+    thead tr {
+        border-bottom: 1px solid $dark-border-color;
+    }
 
     th {
         color: $dark-font-color3;
         font-weight: 500;
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        padding: 8px 10px;
+    }
+
+    tbody tr {
+        border-bottom: 1px solid $dark-border-color;
+
+        &:last-child {
+            border-bottom: none;
+        }
+
+        &:hover {
+            background: $dark-header-bg;
+        }
+    }
+
+    td {
+        padding: 8px 10px;
+        vertical-align: middle;
     }
 }
 

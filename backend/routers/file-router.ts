@@ -46,6 +46,87 @@ export class FileRouter extends Router {
     create(app: Express, server: DockgeServer): ExpressRouter {
         const router = express.Router();
 
+        // Download multiple files/folders as a single ZIP.
+        // Paths are passed as repeated `paths` query params, each relative to the stack root.
+        router.get("/api/files-zip/:stackName", async (req: Request, res: Response) => {
+            try {
+                if (!checkAuth(req, server.jwtSecret)) {
+                    res.status(401).json({ ok: false,
+                        msg: "Unauthorized" });
+                    return;
+                }
+
+                const stackName = req.params.stackName;
+                const rawPaths = req.query.paths;
+                const paths: string[] = Array.isArray(rawPaths)
+                    ? rawPaths.filter((p): p is string => typeof p === "string")
+                    : (typeof rawPaths === "string" ? [ rawPaths ] : []);
+
+                if (paths.length === 0) {
+                    res.status(400).json({ ok: false,
+                        msg: "No paths" });
+                    return;
+                }
+
+                let stack: Stack;
+                try {
+                    stack = await Stack.getStack(server, stackName);
+                } catch (_) {
+                    res.status(404).json({ ok: false,
+                        msg: "Stack not found" });
+                    return;
+                }
+
+                const resolvedEntries: { abs: string, name: string, isDir: boolean }[] = [];
+                for (const rel of paths) {
+                    let abs: string;
+                    try {
+                        abs = safePath(stack.path, rel);
+                    } catch (_) {
+                        res.status(400).json({ ok: false,
+                            msg: "Invalid path" });
+                        return;
+                    }
+                    if (!fs.existsSync(abs)) {
+                        continue;
+                    }
+                    const st = fs.statSync(abs);
+                    resolvedEntries.push({ abs,
+                        name: path.basename(abs),
+                        isDir: st.isDirectory() });
+                }
+
+                if (resolvedEntries.length === 0) {
+                    res.status(404).json({ ok: false,
+                        msg: "No valid paths" });
+                    return;
+                }
+
+                res.setHeader("Content-Type", "application/zip");
+                res.setHeader("Content-Disposition", `attachment; filename="${stackName}.zip"`);
+
+                const archive = archiver("zip", { zlib: { level: 6 } });
+                archive.on("error", (err) => {
+                    log.error("FileRouter", "Archive error: " + err.message);
+                });
+                archive.pipe(res);
+                for (const entry of resolvedEntries) {
+                    if (entry.isDir) {
+                        archive.directory(entry.abs, entry.name);
+                    } else {
+                        archive.file(entry.abs, { name: entry.name });
+                    }
+                }
+                await archive.finalize();
+            } catch (e) {
+                log.error("FileRouter", String(e));
+                if (!res.headersSent) {
+                    res.status(500).json({ ok: false,
+                        msg: "Internal server error" });
+                }
+            }
+        });
+
         // Download file or directory (as ZIP)
         router.get("/api/files/:stackName/*", async (req: Request, res: Response) => {
             try {

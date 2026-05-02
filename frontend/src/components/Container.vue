@@ -78,8 +78,15 @@
                     </button>
                 </div>
             </div>
-            <transition name="slide-fade">
-                <div v-if="expandedStats" class="d-flex flex-column gap-3 mt-2">
+            <transition
+                name="stats-expand"
+                @before-enter="statsBeforeEnter"
+                @enter="statsEnter"
+                @after-enter="statsAfterEnter"
+                @before-leave="statsBeforeLeave"
+                @leave="statsLeave"
+            >
+                <div v-if="expandedStats" class="d-flex flex-column gap-3 mt-2 stats-expand-body">
                     <DockerStat
                         v-for="stat in statsInstances"
                         :key="stat.Name"
@@ -375,6 +382,51 @@ export default defineComponent({
         },
         restartService() {
             this.$emit("restart-service", this.name);
+        },
+
+        statsBeforeEnter(el) {
+            el.style.height = "0px";
+            el.style.opacity = "0";
+            el.style.overflow = "hidden";
+        },
+        statsEnter(el, done) {
+            const target = el.scrollHeight;
+            // Force reflow then animate to target height.
+            requestAnimationFrame(() => {
+                el.style.transition = "height 0.22s ease, opacity 0.22s ease";
+                el.style.height = target + "px";
+                el.style.opacity = "1";
+                el.addEventListener("transitionend", function handler(e) {
+                    if (e.propertyName !== "height") {
+                        return;
+                    }
+                    el.removeEventListener("transitionend", handler);
+                    done();
+                });
+            });
+        },
+        statsAfterEnter(el) {
+            el.style.transition = "";
+            el.style.height = "";
+            el.style.overflow = "";
+        },
+        statsBeforeLeave(el) {
+            el.style.height = el.scrollHeight + "px";
+            el.style.overflow = "hidden";
+        },
+        statsLeave(el, done) {
+            requestAnimationFrame(() => {
+                el.style.transition = "height 0.22s ease, opacity 0.22s ease";
+                el.style.height = "0px";
+                el.style.opacity = "0";
+                el.addEventListener("transitionend", function handler(e) {
+                    if (e.propertyName !== "height") {
+                        return;
+                    }
+                    el.removeEventListener("transitionend", handler);
+                    done();
+                });
+            });
         }
 
     }

@@ -61,6 +61,7 @@
                     :datasets="memDatasets"
                     unit="%"
                     :max-y="100"
+                    :sub-value="memSubValue"
                 />
                 <MiniChart
                     label="Network"
@@ -233,6 +234,19 @@ export default {
             return [{ label: "Memory",
                 data: this.memHistory,
                 color: "#86e6a9" }];
+        },
+
+        memSubValue() {
+            if (!this.mcStats?.MemUsage) {
+                return "";
+            }
+            const parts = this.mcStats.MemUsage.split(" / ");
+            if (parts.length !== 2) {
+                return "";
+            }
+            const used = parseBytes(parts[0]) / 1048576;
+            const total = parseBytes(parts[1]) / 1048576;
+            return `${used.toFixed(2)} MiB / ${total.toFixed(2)} MiB`;
         },
 
         netDatasets() {

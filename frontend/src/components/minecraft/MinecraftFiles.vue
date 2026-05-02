@@ -20,21 +20,7 @@
                 </ol>
             </nav>
 
-            <!-- Selection actions (shown when files are selected) -->
-            <template v-if="selectedEntries.length === 1 && !selectedEntries[0].isDir">
-                <button class="btn btn-sm btn-normal" @click="download(selectedEntries[0])">
-                    <font-awesome-icon icon="download" class="me-1" />
-                    Download
-                </button>
-            </template>
-            <template v-if="selectedEntries.length > 0">
-                <button class="btn btn-sm btn-danger" @click="deleteSelected">
-                    <font-awesome-icon icon="trash" class="me-1" />
-                    Delete{{ selectedEntries.length > 1 ? ` (${selectedEntries.length})` : '' }}
-                </button>
-            </template>
-
-            <!-- Fixed actions -->
+            <!-- Reload / New folder -->
             <button class="btn btn-sm btn-normal" :disabled="loading" @click="reload">
                 <font-awesome-icon icon="rotate" />
             </button>
@@ -42,11 +28,29 @@
                 <font-awesome-icon icon="folder-plus" />
                 New Folder
             </button>
+
+            <!-- Download (any selection) + Upload -->
+            <button
+                v-if="selectedEntries.length > 0"
+                class="btn btn-sm btn-normal"
+                @click="downloadSelected"
+            >
+                <font-awesome-icon icon="download" class="me-1" />
+                Download{{ selectedEntries.length > 1 ? ` (${selectedEntries.length})` : '' }}
+            </button>
             <label class="btn btn-sm btn-primary mb-0">
                 <font-awesome-icon icon="upload" class="me-1" />
                 Upload
                 <input ref="fileInput" type="file" multiple class="d-none" @change="handleFileInput" />
             </label>
+
+            <!-- Delete (separated) -->
+            <div v-if="selectedEntries.length > 0" class="ms-4">
+                <button class="btn btn-sm btn-danger" @click="deleteSelected">
+                    <font-awesome-icon icon="trash" class="me-1" />
+                    Delete{{ selectedEntries.length > 1 ? ` (${selectedEntries.length})` : '' }}
+                </button>
+            </div>
         </div>
 
         <!-- New folder prompt -->
@@ -239,24 +243,35 @@ export default {
         },
 
         handleRowClick(entry, idx, event) {
+            // Shift = range select (works for files and folders).
+            if (event.shiftKey && this.lastClickedIdx !== null) {
+                const start = Math.min(this.lastClickedIdx, idx);
+                const end = Math.max(this.lastClickedIdx, idx);
+                this.selectedEntries = this.entries.slice(start, end + 1);
+                return;
+            }
+            // Ctrl/Cmd = toggle this entry into the selection (folders included).
+            if (event.ctrlKey || event.metaKey) {
+                if (this.isSelected(entry)) {
+                    this.selectedEntries = this.selectedEntries.filter(e => e.name !== entry.name);
+                } else {
+                    this.selectedEntries = [ ...this.selectedEntries, entry ];
+                }
+                this.lastClickedIdx = idx;
+                return;
+            }
+            // Plain click on a folder navigates into it.
             if (entry.isDir) {
                 this.navigate(this.joinPath(this.currentPath, entry.name));
                 return;
             }
-
-            if (event.shiftKey && this.lastClickedIdx !== null) {
-                const start = Math.min(this.lastClickedIdx, idx);
-                const end = Math.max(this.lastClickedIdx, idx);
-                const rangeEntries = this.entries.slice(start, end + 1).filter(e => !e.isDir);
-                this.selectedEntries = rangeEntries;
+            // Plain click on a file: toggle single-select.
+            if (this.isSelected(entry) && this.selectedEntries.length === 1) {
+                this.selectedEntries = [];
             } else {
-                if (this.isSelected(entry)) {
-                    this.selectedEntries = this.selectedEntries.filter(e => e.name !== entry.name);
-                } else {
-                    this.selectedEntries = [ entry ];
-                }
-                this.lastClickedIdx = idx;
+                this.selectedEntries = [ entry ];
             }
+            this.lastClickedIdx = idx;
         },
 
         isEditable(filename) {
@@ -280,6 +295,25 @@ export default {
             const relPath = this.joinPath(this.currentPath, entry.name);
             const token = this.$root.socket.token || "";
             const url = `/api/files/${encodeURIComponent(this.stackName)}/${relPath}?token=${encodeURIComponent(token)}`;
+            window.open(url, "_blank");
+        },
+
+        downloadSelected() {
+            if (this.selectedEntries.length === 0) {
+                return;
+            }
+            // Single file → direct stream (preserves original filename).
+            if (this.selectedEntries.length === 1 && !this.selectedEntries[0].isDir) {
+                this.download(this.selectedEntries[0]);
+                return;
+            }
+            const token = this.$root.socket.token || "";
+            const params = new URLSearchParams();
+            params.set("token", token);
+            for (const entry of this.selectedEntries) {
+                params.append("paths", this.joinPath(this.currentPath, entry.name));
+            }
+            const url = `/api/files-zip/${encodeURIComponent(this.stackName)}?${params.toString()}`;
             window.open(url, "_blank");
         },
 
@@ -421,7 +455,8 @@ export default {
 
 .mc-files-table {
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 14px;
+    user-select: none;
 
     thead tr {
         border-bottom: 1px solid $dark-border-color;
@@ -463,7 +498,7 @@ export default {
 
 .breadcrumb {
     background: transparent;
-    font-size: 13px;
+    font-size: 14px;
     a {
         color: $primary;
         text-decoration: none;
