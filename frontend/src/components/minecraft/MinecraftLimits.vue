@@ -8,6 +8,38 @@
         </div>
 
         <div class="mc-limits-grid">
+            <!-- JVM Memory -->
+            <div class="mc-limit-card mc-limit-card-wide">
+                <div class="mc-limit-card-title">
+                    <font-awesome-icon icon="cube" class="me-2 text-primary" />
+                    JVM Memory
+                </div>
+                <div class="mc-limit-row-grid">
+                    <div class="mc-limit-row">
+                        <label>
+                            -Xms <span class="mc-limit-envname">(INIT_MEMORY)</span>
+                        </label>
+                        <input
+                            v-model="form.initMemory"
+                            type="text"
+                            class="form-control form-control-sm"
+                            placeholder="e.g. 1G"
+                        />
+                    </div>
+                    <div class="mc-limit-row">
+                        <label>
+                            -Xmx <span class="mc-limit-envname">(MAX_MEMORY)</span>
+                        </label>
+                        <input
+                            v-model="form.maxMemory"
+                            type="text"
+                            class="form-control form-control-sm"
+                            placeholder="e.g. 4G"
+                        />
+                    </div>
+                </div>
+            </div>
+
             <!-- CPU -->
             <div class="mc-limit-card">
                 <div class="mc-limit-card-title">
@@ -79,6 +111,7 @@
 
 <script>
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
+import { readResourceLimits, readJvmMemory } from "./mcCompose";
 
 function emptyForm() {
     return {
@@ -86,30 +119,17 @@ function emptyForm() {
         cpuReservation: "",
         memLimit: "",
         memReservation: "",
+        initMemory: "",
+        maxMemory: "",
     };
 }
 
 function readFromCompose(jsonConfig, serviceName) {
-    const form = emptyForm();
-    const svc = jsonConfig?.services?.[serviceName];
-    if (!svc) {
-        return form;
-    }
-    const limits = svc.deploy?.resources?.limits || {};
-    const reservations = svc.deploy?.resources?.reservations || {};
-    if (limits.cpus != null) {
-        form.cpuLimit = String(limits.cpus);
-    }
-    if (limits.memory != null) {
-        form.memLimit = String(limits.memory);
-    }
-    if (reservations.cpus != null) {
-        form.cpuReservation = String(reservations.cpus);
-    }
-    if (reservations.memory != null) {
-        form.memReservation = String(reservations.memory);
-    }
-    return form;
+    return {
+        ...emptyForm(),
+        ...readResourceLimits(jsonConfig, serviceName),
+        ...readJvmMemory(jsonConfig, serviceName),
+    };
 }
 
 export default {
@@ -171,6 +191,8 @@ export default {
                 cpuReservation: this.form.cpuReservation.trim() || null,
                 memLimit: this.form.memLimit.trim() || null,
                 memReservation: this.form.memReservation.trim() || null,
+                initMemory: this.form.initMemory.trim() || null,
+                maxMemory: this.form.maxMemory.trim() || null,
             };
             this.$root.emitAgent(this.endpoint, "minecraftSetLimits", this.stackName, this.serviceName, payload, (res) => {
                 this.saving = false;
@@ -200,6 +222,23 @@ export default {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 14px;
+}
+
+.mc-limit-card-wide {
+    grid-column: 1 / -1;
+}
+
+.mc-limit-row-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px 14px;
+}
+
+.mc-limit-envname {
+    font-size: 11px;
+    color: $dark-font-color3;
+    font-family: 'JetBrains Mono', monospace;
+    margin-left: 2px;
 }
 
 .mc-limit-card {

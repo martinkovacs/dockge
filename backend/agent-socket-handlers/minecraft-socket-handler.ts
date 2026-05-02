@@ -393,6 +393,8 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                 const memLimit = l.memLimit as string | null | undefined;
                 const cpuRes = l.cpuReservation as string | number | null | undefined;
                 const memRes = l.memReservation as string | null | undefined;
+                const initMemory = l.initMemory as string | null | undefined;
+                const maxMemory = l.maxMemory as string | null | undefined;
 
                 const deploy = ensureMapAt(svc, "deploy");
                 const resources = ensureMapAt(deploy, "resources");
@@ -417,6 +419,69 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                 }
                 if (deploy.items.length === 0) {
                     svc.delete("deploy");
+                }
+
+                // JVM memory env vars (INIT_MEMORY/MAX_MEMORY). The
+                // `environment` key may be a YAMLMap ({KEY: VAL}) or a YAMLSeq
+                // of "KEY=VAL" strings — handle both so we don't clobber the
+                // user's existing style.
+                const setEnvVar = (key: string, value: string | null | undefined) => {
+                    const empty = value === null || value === undefined || value === "";
+                    let env = svc.get("environment", true) as unknown;
+
+                    if (env instanceof YAML.YAMLSeq) {
+                        // Find existing entry "KEY" or "KEY=..."
+                        let found = -1;
+                        for (let i = 0; i < env.items.length; i++) {
+                            const item = env.items[i];
+                            const raw = (item instanceof YAML.Scalar) ? String(item.value) : (typeof item === "string" ? item : "");
+                            const eq = raw.indexOf("=");
+                            const k = eq === -1 ? raw : raw.slice(0, eq);
+                            if (k === key) {
+                                found = i;
+                                break;
+                            }
+                        }
+                        if (empty) {
+                            if (found !== -1) {
+                                env.items.splice(found, 1);
+                            }
+                        } else {
+                            const newScalar = new YAML.Scalar(`${key}=${value}`);
+                            if (found !== -1) {
+                                env.items[found] = newScalar;
+                            } else {
+                                env.items.push(newScalar);
+                            }
+                        }
+                        return;
+                    }
+
+                    if (env instanceof YAML.YAMLMap) {
+                        if (empty) {
+                            env.delete(key);
+                        } else {
+                            env.set(key, value);
+                        }
+                        return;
+                    }
+
+                    // No environment yet — only create when we have a value to set.
+                    if (!empty) {
+                        const m = new YAML.YAMLMap();
+                        m.set(key, value);
+                        svc.set("environment", m);
+                    }
+                };
+
+                setEnvVar("INIT_MEMORY", initMemory || null);
+                setEnvVar("MAX_MEMORY", maxMemory || null);
+
+                const finalEnv = svc.get("environment", true) as unknown;
+                if (finalEnv instanceof YAML.YAMLMap && finalEnv.items.length === 0) {
+                    svc.delete("environment");
+                } else if (finalEnv instanceof YAML.YAMLSeq && finalEnv.items.length === 0) {
+                    svc.delete("environment");
                 }
 
                 await fsAsync.writeFile(actualPath, doc.toString(), "utf-8");

@@ -242,7 +242,8 @@ export default {
 }
 
 .mini-chart-canvas-wrap {
-    height: 60px;
+    flex: 1 1 60px;
+    min-height: 60px;
     position: relative;
 }
 </style>

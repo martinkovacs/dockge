@@ -59,14 +59,6 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <!-- Back row -->
-                    <tr v-if="currentPath !== ''" class="mc-file-row" @click.stop="navigateUp">
-                        <td colspan="3">
-                            <font-awesome-icon icon="folder" class="me-2 text-warning" />
-                            ..
-                        </td>
-                    </tr>
-
                     <!-- Pending new file/folder (inline create) -->
                     <tr v-if="pendingNew" class="mc-file-row pending-new">
                         <td>
@@ -288,12 +280,6 @@ export default {
                 history.pushState({ mcFilesPath: relPath }, "");
             }
             this.reload();
-        },
-
-        navigateUp() {
-            const parts = this.currentPath.split("/").filter(Boolean);
-            parts.pop();
-            this.navigate(parts.join("/"));
         },
 
         onPopState(e) {

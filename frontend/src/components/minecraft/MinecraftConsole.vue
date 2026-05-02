@@ -43,12 +43,28 @@
             <!-- Right: status, address, charts -->
             <div class="mc-charts-col">
                 <div class="mc-info-block mb-2">
-                    <div class="mc-info-label">Status</div>
-                    <div class="mc-info-value">
-                        <span :class="statusClass">{{ statusText }}</span>
+                    <div class="mc-info-col">
+                        <div class="mc-info-label">Status</div>
+                        <div class="mc-info-value">
+                            <span :class="statusClass">{{ statusText }}</span>
+                        </div>
+                        <div class="mc-info-label mt-2">Address</div>
+                        <div class="mc-info-value address-val">{{ serverAddress }}</div>
                     </div>
-                    <div class="mc-info-label mt-2">Address</div>
-                    <div class="mc-info-value address-val">{{ serverAddress }}</div>
+                    <div class="mc-info-col mc-info-col-limits">
+                        <div class="mc-info-label">CPU limit</div>
+                        <div class="mc-info-value">{{ resourceLimits.cpuLimit || "—" }}</div>
+                        <div class="mc-info-label mt-2">Mem limit</div>
+                        <div class="mc-info-value">{{ resourceLimits.memLimit || "—" }}</div>
+                        <div class="mc-info-label mt-2">
+                            -Xms <span class="mc-info-envname">(INIT_MEMORY)</span>
+                        </div>
+                        <div class="mc-info-value">{{ jvmMemory.initMemory || "—" }}</div>
+                        <div class="mc-info-label mt-2">
+                            -Xmx <span class="mc-info-envname">(MAX_MEMORY)</span>
+                        </div>
+                        <div class="mc-info-value">{{ jvmMemory.maxMemory || "—" }}</div>
+                    </div>
                 </div>
                 <MiniChart
                     label="CPU"
@@ -79,6 +95,7 @@ import Terminal from "../Terminal.vue";
 import MiniChart from "./MiniChart.vue";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import { RUNNING } from "../../../../common/util-common";
+import { readResourceLimits, readJvmMemory } from "./mcCompose";
 
 const HISTORY = 60;
 
@@ -166,6 +183,7 @@ export default {
         return {
             terminalName: "",
             attaching: false,
+            reattachTimer: null,
             cmdInput: "",
             cpuHistory: Array(HISTORY).fill(0),
             memHistory: Array(HISTORY).fill(0),
@@ -187,6 +205,14 @@ export default {
 
         statusClass() {
             return this.isRunning ? "text-success fw-bold" : "text-danger fw-bold";
+        },
+
+        resourceLimits() {
+            return readResourceLimits(this.jsonConfig, this.serviceName);
+        },
+
+        jvmMemory() {
+            return readJvmMemory(this.jsonConfig, this.serviceName);
         },
 
         serverAddress() {
@@ -278,6 +304,32 @@ export default {
                 this.attaching = false;
             }
         },
+
+        // When the docker attach pty exits (typical case: container restart
+        // killing the attached process), the backend emits `terminalExit` and
+        // the entry is removed from its terminalMap. Clear our local
+        // reference so a fresh attach can run; if the server is still
+        // marked as running, reconnect after a short delay (the new
+        // container needs a moment to come up).
+        "$root.lastTerminalExit": {
+            deep: true,
+            handler(val) {
+                if (!val || !this.terminalName || val.name !== this.terminalName) {
+                    return;
+                }
+                this.terminalName = "";
+                this.attaching = false;
+                if (this.reattachTimer) {
+                    clearTimeout(this.reattachTimer);
+                }
+                this.reattachTimer = setTimeout(() => {
+                    this.reattachTimer = null;
+                    if (this.isRunning) {
+                        this.attach();
+                    }
+                }, 1500);
+            },
+        },
     },
 
     mounted() {
@@ -287,6 +339,10 @@ export default {
     },
 
     beforeUnmount() {
+        if (this.reattachTimer) {
+            clearTimeout(this.reattachTimer);
+            this.reattachTimer = null;
+        }
         if (this.terminalName) {
             this.$root.emitAgent(this.endpoint, "leaveCombinedTerminal", this.stackName, () => {});
         }
@@ -364,6 +420,34 @@ export default {
     background: $dark-header-bg;
     border-radius: 8px;
     padding: 10px 14px;
+    display: flex;
+    flex-direction: row;
+    gap: 14px;
+    align-items: flex-start;
+}
+
+.mc-info-col {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.mc-info-col-limits {
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    padding-left: 12px;
+}
+
+.mc-info-envname {
+    font-size: 10px;
+    color: $dark-font-color3;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+@media (max-width: 1100px) {
+    .mc-info-col-limits {
+        display: none;
+    }
 }
 
 .mc-info-label {
@@ -407,7 +491,7 @@ export default {
     flex: 1;
     min-height: 0;
     background: #000;
-    border-radius: 6px;
+    border-radius: 10px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -419,7 +503,7 @@ export default {
         padding: 0;
         background: transparent !important;
         box-shadow: none;
-        border-radius: 6px;
+        border-radius: 10px;
         height: 100%;
         overflow: hidden;
         display: flex;
@@ -473,6 +557,12 @@ export default {
     width: 25%;
     max-width: 420px;
     flex-shrink: 0;
+    min-height: 0;
+
+    > :deep(.mini-chart-wrapper) {
+        flex: 1 1 0;
+        min-height: 0;
+    }
 
     @media (max-width: 900px) {
         width: 100%;
