@@ -50,6 +50,13 @@ export default {
             type: Number,
             default: null,
         },
+        // When true and the peak data value exceeds maxY, the y-axis grows
+        // to fit the peak instead of clipping it. When false (default), maxY
+        // is a hard ceiling.
+        allowGrowAboveMax: {
+            type: Boolean,
+            default: false,
+        },
         subValue: {
             type: String,
             default: "",
@@ -103,13 +110,25 @@ export default {
         },
 
         chartOptions() {
-            // Pick a suggestedMax slightly above the highest value so the line
-            // never touches the top edge (was the source of the "cropped top").
             const peak = Math.max(
                 0,
                 ...this.datasets.flatMap(ds => ds.data || []),
             );
-            const suggestedMax = this.maxY ?? Math.max(10, peak * 1.15);
+            // Resolve the y-axis ceiling:
+            //  * no maxY → grow to ~115% of peak (min 10) so the line never
+            //    touches the top edge.
+            //  * maxY set, peak <= maxY → cap at maxY.
+            //  * maxY set, peak > maxY → only honour the cap when
+            //    allowGrowAboveMax is false; otherwise grow to ~110% of peak.
+            let yMax;
+            if (this.maxY == null) {
+                yMax = Math.max(10, peak * 1.15);
+            } else if (peak > this.maxY && this.allowGrowAboveMax) {
+                yMax = peak * 1.1;
+            } else {
+                yMax = this.maxY;
+            }
+            const unit = this.unit;
 
             return {
                 responsive: true,
@@ -117,7 +136,8 @@ export default {
                 animation: false,
                 layout: {
                     padding: { top: 4,
-                        bottom: 2 },
+                        bottom: 2,
+                        left: 2 },
                 },
                 plugins: {
                     legend: { display: false },
@@ -126,10 +146,25 @@ export default {
                 scales: {
                     x: { display: false },
                     y: {
-                        display: false,
+                        display: true,
                         min: 0,
-                        max: this.maxY ?? undefined,
-                        suggestedMax,
+                        max: yMax,
+                        border: { display: false },
+                        grid: {
+                            color: "rgba(255,255,255,0.05)",
+                            drawTicks: false,
+                        },
+                        ticks: {
+                            maxTicksLimit: 3,
+                            font: { size: 9 },
+                            color: "#888",
+                            padding: 2,
+                            callback(value) {
+                                const n = Number(value);
+                                const formatted = Number.isInteger(n) ? n : n.toFixed(1);
+                                return `${formatted}${unit}`;
+                            },
+                        },
                     },
                 },
             };

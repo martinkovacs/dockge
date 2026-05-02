@@ -24,6 +24,17 @@
                     Files
                 </a>
             </li>
+            <li class="nav-item">
+                <a
+                    class="nav-link"
+                    :class="{ active: activeTab === 'limits' }"
+                    href="#"
+                    @click.prevent="activeTab = 'limits'"
+                >
+                    <font-awesome-icon icon="gauge-high" class="me-1" />
+                    Limits
+                </a>
+            </li>
         </ul>
 
         <!-- Tab content -->
@@ -43,6 +54,14 @@
                 :endpoint="endpoint"
                 :stack-name="stackName"
             />
+            <MinecraftLimits
+                v-if="activeTab === 'limits'"
+                :endpoint="endpoint"
+                :stack-name="stackName"
+                :service-name="minecraftServiceName"
+                :json-config="jsonConfig"
+                @saved="$emit('limits-saved')"
+            />
         </div>
     </div>
 </template>
@@ -51,13 +70,15 @@
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import MinecraftConsole from "./MinecraftConsole.vue";
 import MinecraftFiles from "./MinecraftFiles.vue";
+import MinecraftLimits from "./MinecraftLimits.vue";
 
 const MINECRAFT_IMAGES = [ "itzg/minecraft-server", "itzg/mc-proxy" ];
 
 export default {
     components: { FontAwesomeIcon,
         MinecraftConsole,
-        MinecraftFiles },
+        MinecraftFiles,
+        MinecraftLimits },
 
     props: {
         endpoint: { type: String,
@@ -73,6 +94,8 @@ export default {
         pollIntervalMs: { type: Number,
             default: 5000 },
     },
+
+    emits: [ "limits-saved" ],
 
     data() {
         return {
@@ -102,6 +125,7 @@ export default {
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
 }
 
 .mc-tabs {
@@ -129,6 +153,13 @@ export default {
 .mc-panel-content {
     flex: 1;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
+
+    > * {
+        flex: 1;
+        min-height: 0;
+    }
 }
 </style>

@@ -6,8 +6,10 @@ import { AgentSocket } from "../../common/agent-socket";
 import { Settings } from "../settings";
 import { InteractiveTerminal, Terminal } from "../terminal";
 import childProcessAsync from "promisify-child-process";
-import fs, { promises as fsAsync } from "fs";
+import { promises as fsAsync } from "fs";
 import path from "path";
+import AdmZip from "adm-zip";
+import * as YAML from "yaml";
 import { log } from "../log";
 import { TERMINAL_ROWS } from "../../common/util-common";
 
@@ -263,6 +265,127 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                 safePath(stack.path, path.relative(stack.path, newPath));
 
                 await fsAsync.rename(targetPath, newPath);
+                callbackResult({ ok: true }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftFileTouch", async (stackName: unknown, relPath: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof relPath !== "string") {
+                    throw new ValidationError("Path must be a string");
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                const targetPath = safePath(stack.path, relPath);
+
+                try {
+                    await fsAsync.access(targetPath);
+                    throw new ValidationError("File already exists");
+                } catch (err: unknown) {
+                    if (err instanceof ValidationError) {
+                        throw err;
+                    }
+                }
+
+                await fsAsync.writeFile(targetPath, "", { flag: "wx" });
+                callbackResult({ ok: true }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftFileUnzip", async (stackName: unknown, relPath: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof relPath !== "string") {
+                    throw new ValidationError("Path must be a string");
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                const targetPath = safePath(stack.path, relPath);
+                const destDir = path.dirname(targetPath);
+
+                const zip = new AdmZip(targetPath);
+                const entries = zip.getEntries();
+                // Reject any entry that would escape destDir.
+                for (const entry of entries) {
+                    const resolved = path.resolve(destDir, entry.entryName);
+                    if (!resolved.startsWith(path.resolve(destDir))) {
+                        throw new ValidationError(`Refusing to extract entry outside target dir: ${entry.entryName}`);
+                    }
+                }
+                zip.extractAllTo(destDir, true);
+                callbackResult({ ok: true,
+                    count: entries.length }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftSetLimits", async (stackName: unknown, serviceName: unknown, limits: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof serviceName !== "string" || !serviceName) {
+                    throw new ValidationError("Service name must be a non-empty string");
+                }
+                if (!limits || typeof limits !== "object") {
+                    throw new ValidationError("Limits must be an object");
+                }
+                const l = limits as Record<string, unknown>;
+
+                const stack = await Stack.getStack(server, stackName);
+                const composePath = path.join(stack.path, "compose.yaml");
+                let actualPath = composePath;
+                try {
+                    await fsAsync.access(composePath);
+                } catch {
+                    actualPath = path.join(stack.path, "compose.yml");
+                }
+
+                const raw = await fsAsync.readFile(actualPath, "utf-8");
+                const doc = YAML.parseDocument(raw);
+
+                const services = doc.get("services") as YAML.YAMLMap | undefined;
+                if (!services || !YAML.isMap(services)) {
+                    throw new ValidationError("compose has no services map");
+                }
+                const svc = services.get(serviceName) as YAML.YAMLMap | undefined;
+                if (!svc || !YAML.isMap(svc)) {
+                    throw new ValidationError(`Service ${serviceName} not found in compose`);
+                }
+
+                const setIn = (pathArr: string[], value: unknown) => {
+                    if (value === null || value === undefined || value === "") {
+                        doc.deleteIn([ "services", serviceName, ...pathArr ]);
+                    } else {
+                        doc.setIn([ "services", serviceName, ...pathArr ], value);
+                    }
+                };
+
+                // Resources block (deploy.resources.{limits,reservations}).
+                const cpuLimit = l.cpuLimit as string | number | null | undefined;
+                const memLimit = l.memLimit as string | null | undefined;
+                const cpuRes = l.cpuReservation as string | number | null | undefined;
+                const memRes = l.memReservation as string | null | undefined;
+
+                setIn([ "deploy", "resources", "limits", "cpus" ], cpuLimit ? String(cpuLimit) : null);
+                setIn([ "deploy", "resources", "limits", "memory" ], memLimit || null);
+                setIn([ "deploy", "resources", "reservations", "cpus" ], cpuRes ? String(cpuRes) : null);
+                setIn([ "deploy", "resources", "reservations", "memory" ], memRes || null);
+
+                await fsAsync.writeFile(actualPath, doc.toString(), "utf-8");
                 callbackResult({ ok: true }, callback);
             } catch (e) {
                 callbackError(e, callback);

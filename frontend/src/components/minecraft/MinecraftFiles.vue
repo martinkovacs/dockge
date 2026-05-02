@@ -1,5 +1,5 @@
 <template>
-    <div class="mc-files">
+    <div class="mc-files" @click="closeContextMenu">
         <!-- Toolbar -->
         <div class="mc-files-toolbar d-flex align-items-center gap-2 mb-2">
             <!-- Breadcrumb -->
@@ -12,59 +12,21 @@
                         v-for="(part, i) in breadcrumbParts"
                         :key="i"
                         class="breadcrumb-item"
-                        :class="{ active: i === breadcrumbParts.length - 1 }"
                     >
                         <a v-if="i < breadcrumbParts.length - 1" href="#" @click.prevent="navigate(breadcrumbPaths[i])">{{ part }}</a>
-                        <span v-else>{{ part }}</span>
+                        <span v-else class="breadcrumb-current">{{ part }}</span>
                     </li>
                 </ol>
             </nav>
 
-            <!-- Reload / New folder -->
-            <button class="btn btn-sm btn-normal" :disabled="loading" @click="reload">
+            <button class="btn btn-sm btn-normal" :disabled="loading" title="Refresh" @click="reload">
                 <font-awesome-icon icon="rotate" />
-            </button>
-            <button class="btn btn-sm btn-normal" @click="showMkdirPrompt = true">
-                <font-awesome-icon icon="folder-plus" />
-                New Folder
-            </button>
-
-            <!-- Download (any selection) + Upload -->
-            <button
-                v-if="selectedEntries.length > 0"
-                class="btn btn-sm btn-normal"
-                @click="downloadSelected"
-            >
-                <font-awesome-icon icon="download" class="me-1" />
-                Download{{ selectedEntries.length > 1 ? ` (${selectedEntries.length})` : '' }}
             </button>
             <label class="btn btn-sm btn-primary mb-0">
                 <font-awesome-icon icon="upload" class="me-1" />
                 Upload
                 <input ref="fileInput" type="file" multiple class="d-none" @change="handleFileInput" />
             </label>
-
-            <!-- Delete (separated) -->
-            <div v-if="selectedEntries.length > 0" class="ms-4">
-                <button class="btn btn-sm btn-danger" @click="deleteSelected">
-                    <font-awesome-icon icon="trash" class="me-1" />
-                    Delete{{ selectedEntries.length > 1 ? ` (${selectedEntries.length})` : '' }}
-                </button>
-            </div>
-        </div>
-
-        <!-- New folder prompt -->
-        <div v-if="showMkdirPrompt" class="input-group mb-2">
-            <input
-                v-model="newFolderName"
-                type="text"
-                class="form-control form-control-sm"
-                placeholder="Folder name"
-                @keyup.enter="mkdir"
-                @keyup.escape="showMkdirPrompt = false; newFolderName = ''"
-            />
-            <button class="btn btn-sm btn-primary" @click="mkdir">Create</button>
-            <button class="btn btn-sm btn-normal" @click="showMkdirPrompt = false; newFolderName = ''">Cancel</button>
         </div>
 
         <!-- Drop zone overlay -->
@@ -74,12 +36,13 @@
             @dragover.prevent="isDragging = true"
             @dragleave="isDragging = false"
             @drop.prevent="handleDrop"
+            @contextmenu.prevent="onBgContextMenu($event)"
         >
             <!-- File list -->
             <div v-if="loading" class="text-center py-4 text-secondary">
                 <font-awesome-icon icon="spinner" spin /> Loading...
             </div>
-            <div v-else-if="entries.length === 0" class="text-center py-4 text-secondary">
+            <div v-else-if="entries.length === 0 && !pendingNew" class="text-center py-4 text-secondary">
                 Empty directory
                 <div v-if="isDragging" class="mt-2 text-primary">Drop files here to upload</div>
             </div>
@@ -93,27 +56,72 @@
                 </thead>
                 <tbody>
                     <!-- Back row -->
-                    <tr v-if="currentPath !== ''" class="mc-file-row" @click="navigateUp">
-                        <td colspan="4">
+                    <tr v-if="currentPath !== ''" class="mc-file-row" @click.stop="navigateUp">
+                        <td colspan="3">
                             <font-awesome-icon icon="folder" class="me-2 text-warning" />
                             ..
                         </td>
                     </tr>
+
+                    <!-- Pending new file/folder (inline create) -->
+                    <tr v-if="pendingNew" class="mc-file-row pending-new">
+                        <td>
+                            <font-awesome-icon
+                                :icon="pendingNew.isDir ? 'folder' : 'file'"
+                                class="me-2"
+                                :class="pendingNew.isDir ? 'text-warning' : 'text-secondary'"
+                            />
+                            <input
+                                ref="pendingNewInput"
+                                v-model="pendingNew.name"
+                                type="text"
+                                class="mc-inline-input"
+                                :placeholder="pendingNew.isDir ? 'New folder' : 'New file'"
+                                @keyup.enter="commitPendingNew"
+                                @keyup.escape="cancelPendingNew"
+                                @blur="commitPendingNew"
+                                @click.stop
+                            />
+                        </td>
+                        <td class="text-end text-secondary">—</td>
+                        <td class="text-end text-secondary">—</td>
+                    </tr>
+
                     <tr
                         v-for="(entry, idx) in entries"
                         :key="entry.name"
                         class="mc-file-row"
                         :class="{ selected: isSelected(entry) }"
                         @click.stop="handleRowClick(entry, idx, $event)"
-                        @dblclick.stop="!entry.isDir ? editFile(entry) : null"
+                        @dblclick.stop="handleRowDblClick(entry)"
+                        @contextmenu.prevent.stop="onRowContextMenu($event, entry, idx)"
                     >
                         <td class="mc-file-name">
-                            <font-awesome-icon
-                                :icon="entry.isDir ? 'folder' : 'file'"
-                                class="me-2"
-                                :class="entry.isDir ? 'text-warning' : 'text-secondary'"
-                            />
-                            <span>{{ entry.name }}</span>
+                            <template v-if="renamingEntry && renamingEntry.name === entry.name">
+                                <font-awesome-icon
+                                    :icon="entry.isDir ? 'folder' : 'file'"
+                                    class="me-2"
+                                    :class="entry.isDir ? 'text-warning' : 'text-secondary'"
+                                />
+                                <input
+                                    ref="renameInput"
+                                    v-model="renameValue"
+                                    type="text"
+                                    class="mc-inline-input"
+                                    @keyup.enter="commitRename"
+                                    @keyup.escape="cancelRename"
+                                    @blur="commitRename"
+                                    @click.stop
+                                />
+                            </template>
+                            <template v-else>
+                                <font-awesome-icon
+                                    :icon="entry.isDir ? 'folder' : 'file'"
+                                    class="me-2"
+                                    :class="entry.isDir ? 'text-warning' : 'text-secondary'"
+                                />
+                                <span>{{ entry.name }}</span>
+                            </template>
                         </td>
                         <td class="text-end text-secondary" style="white-space: nowrap">
                             {{ entry.isDir ? '—' : formatSize(entry.size) }}
@@ -135,6 +143,43 @@
             <font-awesome-icon icon="spinner" spin class="me-1" />
             Uploading...
         </div>
+
+        <!-- Context menu -->
+        <ul
+            v-if="contextMenu.show"
+            class="mc-context-menu"
+            :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
+            @click.stop
+            @contextmenu.prevent.stop
+        >
+            <li v-if="ctxAction('open')" @click="runCtx('open')">
+                <font-awesome-icon icon="folder-open" class="me-2" />Open
+            </li>
+            <li v-if="ctxAction('edit')" @click="runCtx('edit')">
+                <font-awesome-icon icon="pen" class="me-2" />Edit
+            </li>
+            <li v-if="ctxAction('download')" @click="runCtx('download')">
+                <font-awesome-icon icon="download" class="me-2" />
+                Download{{ selectedEntries.length > 1 ? ` (${selectedEntries.length})` : '' }}
+            </li>
+            <li v-if="ctxAction('unzip')" @click="runCtx('unzip')">
+                <font-awesome-icon icon="file-zipper" class="me-2" />Unzip
+            </li>
+            <li v-if="ctxAction('rename')" @click="runCtx('rename')">
+                <font-awesome-icon icon="i-cursor" class="me-2" />Rename
+            </li>
+            <li v-if="ctxAction('delete')" class="danger" @click="runCtx('delete')">
+                <font-awesome-icon icon="trash" class="me-2" />
+                Delete{{ selectedEntries.length > 1 ? ` (${selectedEntries.length})` : '' }}
+            </li>
+            <li v-if="hasItemActions" class="separator"></li>
+            <li @click="runCtx('newFile')">
+                <font-awesome-icon icon="file" class="me-2" />New File
+            </li>
+            <li @click="runCtx('newFolder')">
+                <font-awesome-icon icon="folder-plus" class="me-2" />New Folder
+            </li>
+        </ul>
 
         <!-- File editor modal -->
         <FileEditor
@@ -181,10 +226,15 @@ export default {
             isDragging: false,
             editingFile: null,
             editingContent: "",
-            showMkdirPrompt: false,
-            newFolderName: "",
             selectedEntries: [],
             lastClickedIdx: null,
+            contextMenu: { show: false,
+                x: 0,
+                y: 0,
+                target: null }, // target=null → background menu
+            pendingNew: null, // { name, isDir } during inline create
+            renamingEntry: null, // entry currently being renamed
+            renameValue: "",
         };
     },
 
@@ -199,10 +249,20 @@ export default {
             const parts = this.breadcrumbParts;
             return parts.map((_, i) => parts.slice(0, i + 1).join("/"));
         },
+        hasItemActions() {
+            return this.contextMenu.show && this.selectedEntries.length > 0;
+        },
     },
 
     mounted() {
         this.reload();
+        window.addEventListener("keydown", this.onKeyDown);
+        window.addEventListener("scroll", this.closeContextMenu, true);
+    },
+
+    beforeUnmount() {
+        window.removeEventListener("keydown", this.onKeyDown);
+        window.removeEventListener("scroll", this.closeContextMenu, true);
     },
 
     methods: {
@@ -220,13 +280,14 @@ export default {
         navigateUp() {
             const parts = this.currentPath.split("/").filter(Boolean);
             parts.pop();
-            this.currentPath = parts.join("/");
-            this.reload();
+            this.navigate(parts.join("/"));
         },
 
         reload() {
             this.selectedEntries = [];
             this.lastClickedIdx = null;
+            this.cancelPendingNew();
+            this.cancelRename();
             this.loading = true;
             this.$root.emitAgent(this.endpoint, "minecraftFilelist", this.stackName, this.currentPath, (res) => {
                 this.loading = false;
@@ -243,14 +304,14 @@ export default {
         },
 
         handleRowClick(entry, idx, event) {
-            // Shift = range select (works for files and folders).
+            // Shift = range select.
             if (event.shiftKey && this.lastClickedIdx !== null) {
                 const start = Math.min(this.lastClickedIdx, idx);
                 const end = Math.max(this.lastClickedIdx, idx);
                 this.selectedEntries = this.entries.slice(start, end + 1);
                 return;
             }
-            // Ctrl/Cmd = toggle this entry into the selection (folders included).
+            // Ctrl/Cmd = toggle individual.
             if (event.ctrlKey || event.metaKey) {
                 if (this.isSelected(entry)) {
                     this.selectedEntries = this.selectedEntries.filter(e => e.name !== entry.name);
@@ -260,18 +321,23 @@ export default {
                 this.lastClickedIdx = idx;
                 return;
             }
-            // Plain click on a folder navigates into it.
-            if (entry.isDir) {
-                this.navigate(this.joinPath(this.currentPath, entry.name));
-                return;
-            }
-            // Plain click on a file: toggle single-select.
+            // Plain click: single-select (folders behave the same as files now).
             if (this.isSelected(entry) && this.selectedEntries.length === 1) {
                 this.selectedEntries = [];
             } else {
                 this.selectedEntries = [ entry ];
             }
             this.lastClickedIdx = idx;
+        },
+
+        handleRowDblClick(entry) {
+            if (entry.isDir) {
+                this.navigate(this.joinPath(this.currentPath, entry.name));
+            } else if (this.isEditable(entry.name)) {
+                this.editFile(entry);
+            } else {
+                this.download(entry);
+            }
         },
 
         isEditable(filename) {
@@ -293,7 +359,7 @@ export default {
 
         download(entry) {
             const relPath = this.joinPath(this.currentPath, entry.name);
-            const token = this.$root.socket.token || "";
+            const token = this.$root.socketIO.token || "";
             const url = `/api/files/${encodeURIComponent(this.stackName)}/${relPath}?token=${encodeURIComponent(token)}`;
             window.open(url, "_blank");
         },
@@ -302,12 +368,11 @@ export default {
             if (this.selectedEntries.length === 0) {
                 return;
             }
-            // Single file → direct stream (preserves original filename).
             if (this.selectedEntries.length === 1 && !this.selectedEntries[0].isDir) {
                 this.download(this.selectedEntries[0]);
                 return;
             }
-            const token = this.$root.socket.token || "";
+            const token = this.$root.socketIO.token || "";
             const params = new URLSearchParams();
             params.set("token", token);
             for (const entry of this.selectedEntries) {
@@ -339,28 +404,190 @@ export default {
             this.reload();
         },
 
-        mkdir() {
-            if (!this.newFolderName) {
+        // ----- Inline create (windows-style) -----
+        startNew(isDir) {
+            this.pendingNew = { name: "",
+                isDir };
+            this.$nextTick(() => {
+                this.$refs.pendingNewInput?.focus();
+            });
+        },
+
+        cancelPendingNew() {
+            this.pendingNew = null;
+        },
+
+        commitPendingNew() {
+            if (!this.pendingNew) {
                 return;
             }
-            const relPath = this.joinPath(this.currentPath, this.newFolderName);
-            this.$root.emitAgent(this.endpoint, "minecraftFileMkdir", this.stackName, relPath, (res) => {
-                this.showMkdirPrompt = false;
-                this.newFolderName = "";
+            const name = this.pendingNew.name.trim();
+            const isDir = this.pendingNew.isDir;
+            this.pendingNew = null;
+            if (!name) {
+                return;
+            }
+            if (name.includes("/") || name.includes("\\") || name === ".." || name === ".") {
+                this.$root.toastError("Invalid name");
+                return;
+            }
+            const relPath = this.joinPath(this.currentPath, name);
+            const evt = isDir ? "minecraftFileMkdir" : "minecraftFileTouch";
+            this.$root.emitAgent(this.endpoint, evt, this.stackName, relPath, (res) => {
                 if (res.ok) {
                     this.reload();
                 } else {
-                    this.$root.toastError(res.msg || "Failed to create folder");
+                    this.$root.toastError(res.msg || `Failed to create ${isDir ? "folder" : "file"}`);
                 }
             });
         },
 
+        // ----- Inline rename -----
+        startRename(entry) {
+            this.renamingEntry = entry;
+            this.renameValue = entry.name;
+            this.$nextTick(() => {
+                const el = Array.isArray(this.$refs.renameInput) ? this.$refs.renameInput[0] : this.$refs.renameInput;
+                if (el) {
+                    el.focus();
+                    el.select();
+                }
+            });
+        },
+
+        cancelRename() {
+            this.renamingEntry = null;
+            this.renameValue = "";
+        },
+
+        commitRename() {
+            if (!this.renamingEntry) {
+                return;
+            }
+            const entry = this.renamingEntry;
+            const newName = this.renameValue.trim();
+            this.renamingEntry = null;
+            if (!newName || newName === entry.name) {
+                return;
+            }
+            const relPath = this.joinPath(this.currentPath, entry.name);
+            this.$root.emitAgent(this.endpoint, "minecraftFileRename", this.stackName, relPath, newName, (res) => {
+                if (res.ok) {
+                    this.reload();
+                } else {
+                    this.$root.toastError(res.msg || "Rename failed");
+                }
+            });
+        },
+
+        // ----- Unzip -----
+        unzipSelected() {
+            const entry = this.selectedEntries[0];
+            if (!entry || entry.isDir || !entry.name.toLowerCase().endsWith(".zip")) {
+                return;
+            }
+            const relPath = this.joinPath(this.currentPath, entry.name);
+            this.$root.emitAgent(this.endpoint, "minecraftFileUnzip", this.stackName, relPath, (res) => {
+                if (res.ok) {
+                    this.$root.toastSuccess(`Extracted ${res.count} entries`);
+                    this.reload();
+                } else {
+                    this.$root.toastError(res.msg || "Unzip failed");
+                }
+            });
+        },
+
+        // ----- Context menu -----
+        onRowContextMenu(event, entry) {
+            if (!this.isSelected(entry)) {
+                this.selectedEntries = [ entry ];
+            }
+            this.openContextMenu(event, entry);
+        },
+
+        onBgContextMenu(event) {
+            // Right-click on empty space: clear selection, show menu with create-only items.
+            if (event.target.closest(".mc-file-row")) {
+                return;
+            }
+            this.selectedEntries = [];
+            this.openContextMenu(event, null);
+        },
+
+        openContextMenu(event, target) {
+            this.contextMenu = {
+                show: true,
+                x: event.clientX,
+                y: event.clientY,
+                target,
+            };
+        },
+
+        closeContextMenu() {
+            if (this.contextMenu.show) {
+                this.contextMenu.show = false;
+            }
+        },
+
+        ctxAction(name) {
+            const sel = this.selectedEntries;
+            const oneFile = sel.length === 1 && !sel[0].isDir;
+            const oneDir = sel.length === 1 && sel[0].isDir;
+            switch (name) {
+                case "open": return oneDir;
+                case "edit": return oneFile && this.isEditable(sel[0].name);
+                case "download": return sel.length > 0;
+                case "unzip": return oneFile && sel[0].name.toLowerCase().endsWith(".zip");
+                case "rename": return sel.length === 1;
+                case "delete": return sel.length > 0;
+            }
+            return false;
+        },
+
+        runCtx(action) {
+            const sel = this.selectedEntries;
+            this.closeContextMenu();
+            switch (action) {
+                case "open":
+                    this.navigate(this.joinPath(this.currentPath, sel[0].name));
+                    break;
+                case "edit":
+                    this.editFile(sel[0]);
+                    break;
+                case "download":
+                    this.downloadSelected();
+                    break;
+                case "unzip":
+                    this.unzipSelected();
+                    break;
+                case "rename":
+                    this.startRename(sel[0]);
+                    break;
+                case "delete":
+                    this.deleteSelected();
+                    break;
+                case "newFile":
+                    this.startNew(false);
+                    break;
+                case "newFolder":
+                    this.startNew(true);
+                    break;
+            }
+        },
+
+        onKeyDown(e) {
+            if (e.key === "Escape") {
+                this.closeContextMenu();
+            }
+        },
+
+        // ----- Upload -----
         async uploadFiles(files) {
             if (!files.length) {
                 return;
             }
             this.uploading = true;
-            const token = this.$root.socket.token || "";
+            const token = this.$root.socketIO.token || "";
             const uploadPath = this.currentPath ? `${this.currentPath}/` : "";
             const url = `/api/files/${encodeURIComponent(this.stackName)}/${uploadPath}`;
             const formData = new FormData();
@@ -423,10 +650,12 @@ export default {
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
 }
 
 .mc-files-drop-zone {
     flex: 1;
+    min-height: 0;
     border-radius: 8px;
     border: 2px dashed transparent;
     transition: border-color 0.2s, background 0.2s;
@@ -483,6 +712,10 @@ export default {
             background: rgba(116, 194, 255, 0.1);
         }
 
+        &.pending-new {
+            background: rgba(116, 194, 255, 0.08);
+        }
+
         td {
             padding: 7px 8px;
         }
@@ -504,6 +737,68 @@ export default {
         text-decoration: none;
         &:hover {
             text-decoration: underline;
+        }
+    }
+    .breadcrumb-current {
+        color: $primary;
+    }
+    // Override Bootstrap's muted .active style.
+    .breadcrumb-item.active {
+        color: $primary;
+    }
+}
+
+.mc-inline-input {
+    background: $dark-bg;
+    color: $dark-font-color;
+    border: 1px solid $primary;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 14px;
+    outline: none;
+    width: calc(100% - 30px);
+}
+
+.mc-context-menu {
+    position: fixed;
+    z-index: 1080;
+    min-width: 180px;
+    background: $dark-header-bg;
+    border: 1px solid $dark-border-color;
+    border-radius: 6px;
+    padding: 4px 0;
+    margin: 0;
+    list-style: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    font-size: 14px;
+
+    li {
+        padding: 6px 14px;
+        cursor: pointer;
+        color: $dark-font-color;
+        display: flex;
+        align-items: center;
+
+        &:hover {
+            background: rgba(116, 194, 255, 0.15);
+        }
+
+        &.danger {
+            color: #f47272;
+            &:hover {
+                background: rgba(244, 114, 114, 0.15);
+            }
+        }
+
+        &.separator {
+            height: 1px;
+            padding: 0;
+            margin: 4px 0;
+            background: $dark-border-color;
+            cursor: default;
+            &:hover {
+                background: $dark-border-color;
+            }
         }
     }
 }

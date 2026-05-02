@@ -55,6 +55,7 @@
                     :datasets="cpuDatasets"
                     unit="%"
                     :max-y="100"
+                    :allow-grow-above-max="true"
                 />
                 <MiniChart
                     label="Memory"
@@ -450,7 +451,7 @@ export default {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    width: 20%;
+    width: 25%;
     max-width: 420px;
     flex-shrink: 0;
 

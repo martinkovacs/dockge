@@ -46,12 +46,10 @@
                         {{ $t("stopStack") }}
                     </button>
 
-                    <BDropdown right text="" variant="normal">
-                        <BDropdownItem @click="downStack">
-                            <font-awesome-icon icon="stop" class="me-1" />
-                            {{ $t("downStack") }}
-                        </BDropdownItem>
-                    </BDropdown>
+                    <button v-if="!isEditMode" class="btn btn-normal" :disabled="processing" @click="downStack">
+                        <font-awesome-icon icon="stop" class="me-1" />
+                        {{ $t("downStack") }}
+                    </button>
                 </div>
 
                 <button v-if="isEditMode && !isAdd" class="btn btn-normal" :disabled="processing" @click="discardStack">{{ $t("discardStack") }}</button>
