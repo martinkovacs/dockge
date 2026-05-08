@@ -1007,7 +1007,8 @@ export default {
         :deep(svg) {
             height: 14px;
             width: auto;
-            display: block;
+            display: inline-block;
+            vertical-align: middle;
         }
     }
 }
