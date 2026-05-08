@@ -987,10 +987,10 @@ export default {
     flex-direction: column;
 }
 
-// Uniform button heights across the action bar. Flex-stretch alone is
-// not enough because FontAwesome glyphs (e.g. the trash icon in Delete)
-// have different intrinsic heights and push individual buttons taller.
-// Lock every action-bar button to a fixed height and clamp the icon size.
+// Uniform button heights across the action bar. Without this, "Stop &
+// Inactive" wraps under its icon and the trash glyph in Delete renders
+// taller than the others. Lock height + nowrap + clamp icon size on
+// every action-bar button (desktop and mobile).
 .action-bar {
     align-items: stretch !important;
 
@@ -999,7 +999,10 @@ export default {
         align-items: center;
         justify-content: center;
         line-height: 1;
-        height: 38px;
+        height: 38px !important;
+        min-height: 38px;
+        white-space: nowrap;
+        box-sizing: border-box;
 
         :deep(svg) {
             height: 14px;
@@ -1026,10 +1029,10 @@ export default {
             min-width: 0;
             padding: 0 0.6rem;
             font-size: 0.85rem;
-            height: 34px;
+            height: 34px !important;
+            min-height: 34px;
             border-radius: 0.5rem !important;
             margin: 0;
-            white-space: nowrap;
         }
 
         .dropdown {
@@ -1037,7 +1040,8 @@ export default {
 
             > .btn {
                 width: 2.25rem;
-                height: 34px;
+                height: 34px !important;
+                min-height: 34px;
                 padding: 0;
                 font-size: 0.85rem;
                 border-radius: 0.5rem !important;
