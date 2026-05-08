@@ -1000,12 +1000,17 @@ export default {
 
         > .btn,
         .action-btn-group > .btn {
-            flex: 1 1 0;
+            flex: 1 1 auto;
             min-width: 0;
-            padding: 0.35rem 0.4rem;
+            padding: 0.35rem 0.6rem;
             font-size: 0.85rem;
             border-radius: 0.5rem !important;
             margin: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            line-height: 1.2;
         }
 
         .dropdown {
@@ -1018,6 +1023,10 @@ export default {
                 font-size: 0.85rem;
                 border-radius: 0.5rem !important;
                 margin: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                line-height: 1.2;
             }
         }
     }
