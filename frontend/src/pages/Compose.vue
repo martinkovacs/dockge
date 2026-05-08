@@ -1000,13 +1000,14 @@ export default {
 
         > .btn,
         .action-btn-group > .btn {
-            flex: 1 1 auto;
+            flex: 0 1 auto;
             border-radius: 0.5rem !important;
             margin: 0;
         }
 
         .dropdown {
             flex: 0 0 auto;
+            margin-left: auto; // pin kebab to row end so it stays inline
         }
     }
 }

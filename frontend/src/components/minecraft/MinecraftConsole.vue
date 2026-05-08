@@ -670,14 +670,10 @@ export default {
     .mc-charts-col {
         width: 100%;
         max-width: none;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        display: flex;
+        flex-direction: column;
         gap: 8px;
         flex-shrink: 1;
-    }
-
-    .mc-info-block {
-        grid-column: 1 / -1;
     }
 }
 </style>
