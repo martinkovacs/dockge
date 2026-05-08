@@ -987,30 +987,13 @@ export default {
     flex-direction: column;
 }
 
-// Uniform action-bar button heights. The wrapping inline-flex .btn-group
-// computes its own height from its inner-flex line box, which renders a
-// hair shorter than a standalone .btn sibling under `align-items: center`.
-// Pin the group's height to match the buttons and stretch its children so
-// the visible button heights align exactly across the bar.
-.action-bar {
-    .action-btn-group {
-        min-height: 38px;
-        align-items: stretch;
-
-        > .btn {
-            height: auto !important;
-            align-self: stretch;
-        }
-    }
-
-    .btn {
-        height: 38px !important;
-        line-height: 1.5 !important;
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
-        box-sizing: border-box !important;
-        white-space: nowrap;
-    }
+// Drop borders from action-bar buttons. .btn-danger's border-color matches
+// its background so the button's visible color spans the full box, while
+// variants like .btn-normal use a near-invisible border-color that doesn't
+// blend with the dashboard background — making same-height buttons look
+// different sizes.
+.action-bar .btn {
+    border: 0;
 }
 
 @media (max-width: $bp-mobile) {
@@ -1028,23 +1011,31 @@ export default {
         .action-btn-group > .btn {
             flex: 1 1 auto;
             min-width: 0;
-            padding: 0 0.6rem;
+            padding: 0.35rem 0.6rem;
             font-size: 0.85rem;
-            height: 34px !important;
             border-radius: 0.5rem !important;
             margin: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            line-height: 1.2;
         }
 
         .dropdown {
             flex: 0 0 auto;
 
             > .btn {
+                flex: 0 0 auto;
                 width: 2.25rem;
-                height: 34px !important;
-                padding: 0;
+                padding: 0.35rem 0;
                 font-size: 0.85rem;
                 border-radius: 0.5rem !important;
                 margin: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                line-height: 1.2;
             }
         }
     }
