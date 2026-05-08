@@ -987,10 +987,10 @@ export default {
     flex-direction: column;
 }
 
-// Uniform button heights across the action bar — flex-stretch so every
-// button (including the kebab and any non-grouped buttons) matches the
-// tallest one, and inline-flex centering so icon + label sit on a single
-// baseline regardless of glyph height.
+// Uniform button heights across the action bar. Flex-stretch alone is
+// not enough because FontAwesome glyphs (e.g. the trash icon in Delete)
+// have different intrinsic heights and push individual buttons taller.
+// Lock every action-bar button to a fixed height and clamp the icon size.
 .action-bar {
     align-items: stretch !important;
 
@@ -998,7 +998,14 @@ export default {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        line-height: 1.2;
+        line-height: 1;
+        height: 38px;
+
+        :deep(svg) {
+            height: 14px;
+            width: auto;
+            display: block;
+        }
     }
 }
 
@@ -1017,8 +1024,9 @@ export default {
         .action-btn-group > .btn {
             flex: 1 1 auto;
             min-width: 0;
-            padding: 0.35rem 0.6rem;
+            padding: 0 0.6rem;
             font-size: 0.85rem;
+            height: 34px;
             border-radius: 0.5rem !important;
             margin: 0;
             white-space: nowrap;
@@ -1029,7 +1037,8 @@ export default {
 
             > .btn {
                 width: 2.25rem;
-                padding: 0.35rem 0;
+                height: 34px;
+                padding: 0;
                 font-size: 0.85rem;
                 border-radius: 0.5rem !important;
                 margin: 0;
