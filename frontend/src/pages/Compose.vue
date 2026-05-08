@@ -999,10 +999,10 @@ export default {
         }
 
         > .btn,
-        .action-btn-group > .btn,
-        .dropdown > .btn {
-            flex: 0 1 auto;
-            padding: 0.35rem 0.6rem;
+        .action-btn-group > .btn {
+            flex: 1 1 0;
+            min-width: 0;
+            padding: 0.35rem 0.4rem;
             font-size: 0.85rem;
             border-radius: 0.5rem !important;
             margin: 0;
@@ -1010,6 +1010,15 @@ export default {
 
         .dropdown {
             flex: 0 0 auto;
+
+            > .btn {
+                flex: 0 0 auto;
+                width: 2.25rem;
+                padding: 0.35rem 0;
+                font-size: 0.85rem;
+                border-radius: 0.5rem !important;
+                margin: 0;
+            }
         }
     }
 }
