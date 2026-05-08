@@ -68,6 +68,8 @@ import {
     faFileZipper,
     faICursor,
     faPowerOff,
+    faBars,
+    faEllipsisVertical,
 } from "@fortawesome/free-solid-svg-icons";
 
 library.add(
@@ -137,6 +139,8 @@ library.add(
     faFileZipper,
     faICursor,
     faPowerOff,
+    faBars,
+    faEllipsisVertical,
 );
 
 export { FontAwesomeIcon };

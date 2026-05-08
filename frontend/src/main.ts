@@ -54,10 +54,31 @@ function rootApp() {
                 loggedIn: false,
                 allowLoginDialog: false,
                 username: null,
+                isMobile: window.matchMedia("(max-width: 768px)").matches,
+                sidebarOpen: false,
+                mobileMql: null as MediaQueryList | null,
+                mobileMqlHandler: null as ((e: MediaQueryListEvent) => void) | null,
             };
         },
         computed: {
 
+        },
+        mounted() {
+            const mql = window.matchMedia("(max-width: 768px)");
+            const handler = (e: MediaQueryListEvent) => {
+                this.isMobile = e.matches;
+                if (!e.matches) {
+                    this.sidebarOpen = false;
+                }
+            };
+            mql.addEventListener("change", handler);
+            this.mobileMql = mql;
+            this.mobileMqlHandler = handler;
+        },
+        beforeUnmount() {
+            if (this.mobileMql && this.mobileMqlHandler) {
+                this.mobileMql.removeEventListener("change", this.mobileMqlHandler);
+            }
         },
         methods: {
 

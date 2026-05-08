@@ -9,8 +9,8 @@
                 </span>
             </h1>
 
-            <div v-if="stack.isManagedByDockge" class="mb-3">
-                <div class="btn-group me-2" role="group">
+            <div v-if="stack.isManagedByDockge" class="action-bar mb-3 d-flex flex-wrap align-items-center gap-2">
+                <div class="btn-group flex-wrap" role="group">
                     <button v-if="isEditMode" class="btn btn-primary" :disabled="processing" @click="deployStack">
                         <font-awesome-icon icon="rocket" class="me-1" />
                         {{ $t("deployStack") }}
@@ -36,7 +36,7 @@
                         {{ $t("restartStack") }}
                     </button>
 
-                    <button v-if="!isEditMode" class="btn btn-normal" :disabled="processing" @click="updateStack">
+                    <button v-if="!isEditMode" class="btn btn-normal d-none d-md-inline-block" :disabled="processing" @click="updateStack">
                         <font-awesome-icon icon="cloud-arrow-down" class="me-1" />
                         {{ $t("updateStack") }}
                     </button>
@@ -46,17 +46,41 @@
                         {{ $t("stopStack") }}
                     </button>
 
-                    <button v-if="!isEditMode" class="btn btn-normal" :disabled="processing" @click="downStack">
+                    <button v-if="!isEditMode" class="btn btn-normal d-none d-md-inline-block" :disabled="processing" @click="downStack">
                         <font-awesome-icon icon="power-off" class="me-1" />
                         {{ $t("downStack") }}
                     </button>
                 </div>
 
-                <button v-if="isEditMode && !isAdd" class="btn btn-normal" :disabled="processing" @click="discardStack">{{ $t("discardStack") }}</button>
+                <button v-if="isEditMode && !isAdd" class="btn btn-normal d-none d-md-inline-block" :disabled="processing" @click="discardStack">{{ $t("discardStack") }}</button>
                 <button v-if="!isEditMode" class="btn btn-danger" :disabled="processing" @click="showDeleteDialog = !showDeleteDialog">
                     <font-awesome-icon icon="trash" class="me-1" />
                     {{ $t("deleteStack") }}
                 </button>
+
+                <!-- Mobile overflow kebab -->
+                <div v-if="hasMobileOverflow" class="dropdown d-md-none">
+                    <button class="btn btn-normal" type="button" data-bs-toggle="dropdown" aria-expanded="false" :aria-label="$t('More') || 'More'">
+                        <font-awesome-icon icon="ellipsis-vertical" />
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li v-if="!isEditMode">
+                            <button class="dropdown-item" :disabled="processing" @click="updateStack">
+                                <font-awesome-icon icon="cloud-arrow-down" class="me-1" /> {{ $t("updateStack") }}
+                            </button>
+                        </li>
+                        <li v-if="!isEditMode">
+                            <button class="dropdown-item" :disabled="processing" @click="downStack">
+                                <font-awesome-icon icon="power-off" class="me-1" /> {{ $t("downStack") }}
+                            </button>
+                        </li>
+                        <li v-if="isEditMode && !isAdd">
+                            <button class="dropdown-item" :disabled="processing" @click="discardStack">
+                                {{ $t("discardStack") }}
+                            </button>
+                        </li>
+                    </ul>
+                </div>
             </div>
 
             <!-- URLs -->
@@ -398,6 +422,13 @@ export default {
 
         isAdd() {
             return this.$route.path === "/compose" && !this.submitted;
+        },
+
+        hasMobileOverflow() {
+            if (!this.isEditMode) {
+                return true; // updateStack + downStack
+            }
+            return !this.isAdd; // discardStack
         },
 
         /**

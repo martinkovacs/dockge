@@ -9,6 +9,53 @@
             </div>
         </div>
 
+        <!-- Mobile header -->
+        <header v-if="$root.isMobile && $root.loggedIn" class="mobile-header d-flex align-items-center px-3 py-2 mb-3 border-bottom">
+            <button type="button" class="btn btn-link p-0 me-2 hamburger-btn" :aria-label="$t('Open menu') || 'Open menu'" @click="$root.sidebarOpen = !$root.sidebarOpen">
+                <font-awesome-icon icon="bars" />
+            </button>
+            <router-link to="/" class="d-flex align-items-center text-decoration-none flex-grow-1 justify-content-center mobile-title">
+                <object class="bi me-2" width="28" height="28" data="/icon.svg" />
+                <span class="fs-5 title">Dockge</span>
+            </router-link>
+            <div class="dropdown dropdown-profile-pic">
+                <div class="nav-link" data-bs-toggle="dropdown">
+                    <div class="profile-pic">{{ $root.usernameFirstChar }}</div>
+                    <font-awesome-icon icon="angle-down" />
+                </div>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                        <i18n-t v-if="$root.username != null" tag="span" keypath="signedInDisp" class="dropdown-item-text">
+                            <strong>{{ $root.username }}</strong>
+                        </i18n-t>
+                        <span v-if="$root.username == null" class="dropdown-item-text">{{ $t("signedInDispDisabled") }}</span>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <router-link to="/console" class="dropdown-item">
+                            <font-awesome-icon icon="terminal" /> {{ $t("console") }}
+                        </router-link>
+                    </li>
+                    <li>
+                        <button class="dropdown-item" @click="scanFolder">
+                            <font-awesome-icon icon="arrows-rotate" /> {{ $t("scanFolder") }}
+                        </button>
+                    </li>
+                    <li>
+                        <router-link to="/settings/general" class="dropdown-item" :class="{ active: $route.path.includes('settings') }">
+                            <font-awesome-icon icon="cog" /> {{ $t("Settings") }}
+                        </router-link>
+                    </li>
+                    <li>
+                        <button class="dropdown-item" @click="$root.logout">
+                            <font-awesome-icon icon="sign-out-alt" />
+                            {{ $t("Logout") }}
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </header>
+
         <!-- Desktop header -->
         <header v-if="! $root.isMobile" class="d-flex flex-wrap justify-content-center py-3 mb-3 border-bottom">
             <router-link to="/" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto text-dark text-decoration-none">
@@ -161,6 +208,34 @@ export default {
 .nav-link {
     &.status-page {
         background-color: rgba(255, 255, 255, 0.1);
+    }
+}
+
+.mobile-header {
+    background-color: $dark-header-bg;
+    border-bottom-color: $dark-header-bg !important;
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+
+    .hamburger-btn {
+        font-size: 1.4rem;
+        color: $dark-font-color;
+        line-height: 1;
+        background: transparent;
+        border: 0;
+
+        &:hover, &:focus {
+            color: $primary;
+        }
+    }
+
+    .mobile-title {
+        color: inherit;
+        .title {
+            font-weight: bold;
+            color: #f0f6fc;
+        }
     }
 }
 

@@ -533,7 +533,7 @@ export default {
     white-space: nowrap;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1100px) and (min-width: 769px) {
     .mc-info-col-limits {
         display: none;
     }
@@ -652,16 +652,32 @@ export default {
         flex: 1 1 0;
         min-height: 0;
     }
+}
 
-    @media (max-width: 900px) {
+@media (max-width: $bp-mobile) {
+    .mc-main-row {
+        flex-direction: column;
+    }
+
+    .mc-terminal-col {
+        width: 100%;
+    }
+
+    .mc-terminal-wrap {
+        min-height: 320px;
+    }
+
+    .mc-charts-col {
         width: 100%;
         max-width: none;
-        flex-direction: row;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 8px;
+        flex-shrink: 1;
+    }
 
-        > * {
-            flex: 1 1 calc(50% - 5px);
-        }
+    .mc-info-block {
+        grid-column: 1 / -1;
     }
 }
 </style>
