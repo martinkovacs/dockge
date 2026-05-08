@@ -9,7 +9,7 @@
                 </span>
             </h1>
 
-            <div v-if="stack.isManagedByDockge" class="action-bar mb-3 d-flex flex-wrap align-items-stretch gap-2">
+            <div v-if="stack.isManagedByDockge" class="action-bar mb-3 d-flex flex-wrap align-items-center gap-2">
                 <div class="btn-group action-btn-group flex-wrap" role="group">
                     <button v-if="isEditMode" class="btn btn-primary" :disabled="processing" @click="deployStack">
                         <font-awesome-icon icon="rocket" class="me-1" />
@@ -987,12 +987,28 @@ export default {
     flex-direction: column;
 }
 
-// Uniform action-bar button heights on desktop and mobile. Lock height
-// with !important so all buttons match regardless of intrinsic content
-// height; let FontAwesome handle icon-text alignment via its defaults.
+// Uniform action-bar button heights. The wrapping inline-flex .btn-group
+// computes its own height from its inner-flex line box, which renders a
+// hair shorter than a standalone .btn sibling under `align-items: center`.
+// Pin the group's height to match the buttons and stretch its children so
+// the visible button heights align exactly across the bar.
 .action-bar {
+    .action-btn-group {
+        min-height: 38px;
+        align-items: stretch;
+
+        > .btn {
+            height: auto !important;
+            align-self: stretch;
+        }
+    }
+
     .btn {
         height: 38px !important;
+        line-height: 1.5 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        box-sizing: border-box !important;
         white-space: nowrap;
     }
 }
