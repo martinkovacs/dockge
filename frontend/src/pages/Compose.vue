@@ -9,7 +9,7 @@
                 </span>
             </h1>
 
-            <div v-if="stack.isManagedByDockge" class="action-bar mb-3 d-flex flex-wrap align-items-center gap-2">
+            <div v-if="stack.isManagedByDockge" class="action-bar mb-3 d-flex flex-wrap align-items-stretch gap-2">
                 <div class="btn-group action-btn-group flex-wrap" role="group">
                     <button v-if="isEditMode" class="btn btn-primary" :disabled="processing" @click="deployStack">
                         <font-awesome-icon icon="rocket" class="me-1" />
@@ -987,29 +987,13 @@ export default {
     flex-direction: column;
 }
 
-// Uniform button heights across the action bar. Without this, "Stop &
-// Inactive" wraps under its icon and the trash glyph in Delete renders
-// taller than the others. Lock height + nowrap + clamp icon size on
-// every action-bar button (desktop and mobile).
+// Uniform action-bar button heights on desktop and mobile. Lock height
+// with !important so all buttons match regardless of intrinsic content
+// height; let FontAwesome handle icon-text alignment via its defaults.
 .action-bar {
-    align-items: stretch !important;
-
     .btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        line-height: 1;
         height: 38px !important;
-        min-height: 38px;
         white-space: nowrap;
-        box-sizing: border-box;
-
-        :deep(svg) {
-            height: 14px;
-            width: auto;
-            display: inline-block;
-            vertical-align: middle;
-        }
     }
 }
 
@@ -1031,7 +1015,6 @@ export default {
             padding: 0 0.6rem;
             font-size: 0.85rem;
             height: 34px !important;
-            min-height: 34px;
             border-radius: 0.5rem !important;
             margin: 0;
         }
@@ -1042,7 +1025,6 @@ export default {
             > .btn {
                 width: 2.25rem;
                 height: 34px !important;
-                min-height: 34px;
                 padding: 0;
                 font-size: 0.85rem;
                 border-radius: 0.5rem !important;
