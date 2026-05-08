@@ -329,6 +329,18 @@ export default {
                 this.lastClickedIdx = idx;
                 return;
             }
+            // On mobile / touch, dblclick is unreliable. Use the desktop-style
+            // "click to select, click again to open" pattern: first tap selects,
+            // second tap on the same row opens (navigate dir / edit / download).
+            if (this.$root.isMobile) {
+                if (this.isSelected(entry) && this.selectedEntries.length === 1) {
+                    this.handleRowDblClick(entry);
+                } else {
+                    this.selectedEntries = [ entry ];
+                    this.lastClickedIdx = idx;
+                }
+                return;
+            }
             // Plain click: single-select (folders behave the same as files now).
             if (this.isSelected(entry) && this.selectedEntries.length === 1) {
                 this.selectedEntries = [];

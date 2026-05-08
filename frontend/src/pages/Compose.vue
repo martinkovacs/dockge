@@ -10,7 +10,7 @@
             </h1>
 
             <div v-if="stack.isManagedByDockge" class="action-bar mb-3 d-flex flex-wrap align-items-center gap-2">
-                <div class="btn-group flex-wrap" role="group">
+                <div class="btn-group action-btn-group flex-wrap" role="group">
                     <button v-if="isEditMode" class="btn btn-primary" :disabled="processing" @click="deployStack">
                         <font-awesome-icon icon="rocket" class="me-1" />
                         {{ $t("deployStack") }}
@@ -985,5 +985,29 @@ export default {
     min-height: calc(100vh - 220px);
     display: flex;
     flex-direction: column;
+}
+
+@media (max-width: $bp-mobile) {
+    .action-bar {
+        width: 100%;
+        gap: 0.5rem;
+
+        // Drop the connected btn-group look on mobile — uniform pill buttons
+        // with consistent gaps wrap much more cleanly than a wrapped group.
+        .action-btn-group {
+            display: contents;
+        }
+
+        > .btn,
+        .action-btn-group > .btn {
+            flex: 1 1 auto;
+            border-radius: 0.5rem !important;
+            margin: 0;
+        }
+
+        .dropdown {
+            flex: 0 0 auto;
+        }
+    }
 }
 </style>
