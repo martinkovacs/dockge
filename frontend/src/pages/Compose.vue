@@ -987,6 +987,21 @@ export default {
     flex-direction: column;
 }
 
+// Uniform button heights across the action bar — flex-stretch so every
+// button (including the kebab and any non-grouped buttons) matches the
+// tallest one, and inline-flex centering so icon + label sit on a single
+// baseline regardless of glyph height.
+.action-bar {
+    align-items: stretch !important;
+
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1.2;
+    }
+}
+
 @media (max-width: $bp-mobile) {
     .action-bar {
         width: 100%;
@@ -1006,27 +1021,18 @@ export default {
             font-size: 0.85rem;
             border-radius: 0.5rem !important;
             margin: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
             white-space: nowrap;
-            line-height: 1.2;
         }
 
         .dropdown {
             flex: 0 0 auto;
 
             > .btn {
-                flex: 0 0 auto;
                 width: 2.25rem;
                 padding: 0.35rem 0;
                 font-size: 0.85rem;
                 border-radius: 0.5rem !important;
                 margin: 0;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                line-height: 1.2;
             }
         }
     }
