@@ -990,7 +990,7 @@ export default {
 @media (max-width: $bp-mobile) {
     .action-bar {
         width: 100%;
-        gap: 0.5rem;
+        gap: 0.4rem;
 
         // Drop the connected btn-group look on mobile — uniform pill buttons
         // with consistent gaps wrap much more cleanly than a wrapped group.
@@ -999,15 +999,17 @@ export default {
         }
 
         > .btn,
-        .action-btn-group > .btn {
+        .action-btn-group > .btn,
+        .dropdown > .btn {
             flex: 0 1 auto;
+            padding: 0.35rem 0.6rem;
+            font-size: 0.85rem;
             border-radius: 0.5rem !important;
             margin: 0;
         }
 
         .dropdown {
             flex: 0 0 auto;
-            margin-left: auto; // pin kebab to row end so it stays inline
         }
     }
 }
