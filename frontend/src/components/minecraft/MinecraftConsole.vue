@@ -42,7 +42,7 @@
 
             <!-- Right: status, address, charts -->
             <div class="mc-charts-col">
-                <div class="mc-info-block mb-2">
+                <div class="mc-info-block">
                     <div class="mc-info-col">
                         <div class="mc-info-label">Address</div>
                         <div class="mc-info-value address-val">{{ serverAddress }}</div>
@@ -74,7 +74,6 @@
                     :stack-name="stackName"
                     :service-name="serviceName"
                     :status="status"
-                    class="mb-2"
                 />
                 <MiniChart
                     label="CPU"

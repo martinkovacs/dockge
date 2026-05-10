@@ -51,58 +51,74 @@ import { RUNNING } from "../../../../common/util-common";
 
 const POLL_MS = 5000;
 
-// Parse "TPS from last 1m, 5m, 15m: *20.00, *20.00, *20.00" or
-// "§a20.00, §a20.00, §a20.00" — color codes (§x) and asterisks denote
-// "max TPS". Strip them and pull the first number.
+// Strip Minecraft color codes (§x), Paper's clock-face glyph that
+// prefixes some replies, and the optional `[HH:MM:SS INFO]:` log
+// prefix that some rcon clients echo when streaming back the server's
+// log line for a command.
+function cleanLine(line) {
+    return line
+        .replace(/§./g, "")
+        .replace(/^\[\d{1,2}:\d{2}:\d{2}\s*[A-Z]+\]:\s*/i, "")
+        .replace(/^[◴◷◶◵*]\s*/u, "")
+        .trim();
+}
+
+function eachLine(stdout) {
+    if (!stdout) {
+        return [];
+    }
+    return stdout.split(/\r?\n/).map(cleanLine).filter(l => l.length > 0);
+}
+
+// Paper/Purpur: "TPS from last 1m, 5m, 15m: 20.0, 20.0, 20.0"
+// (the first number is the most recent 1m average — that's what we want).
 function parseTps(stdout) {
-    if (!stdout) {
-        return null;
+    for (const line of eachLine(stdout)) {
+        const m = line.match(/TPS from[^:]*:\s*\*?(\d+(?:\.\d+)?)/i);
+        if (m) {
+            return parseFloat(m[1]);
+        }
     }
-    const cleaned = stdout.replace(/§./g, "").replace(/\*/g, "");
-    const m = cleaned.match(/(\d+\.\d+|\d+)/);
-    return m ? parseFloat(m[1]) : null;
+    return null;
 }
 
-// Parse "Server tick times (avg/min/max) from last 5s, 10s, 1m:
-// §a4.50/§a1.20/§e8.30" — first number is the recent average.
+// Paper: "Server tick times (avg/min/max) from last 5s, 10s, 1m:"
+//        "0.3/0.1/1.2, 0.4/0.1/3.8, 0.9/0.1/39.4"
+// We want the first triple's avg (the leftmost number of the first
+// avg/min/max group).
 function parseMspt(stdout) {
-    if (!stdout) {
-        return null;
+    for (const line of eachLine(stdout)) {
+        const m = line.match(/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)/);
+        if (m) {
+            return parseFloat(m[1]);
+        }
     }
-    const cleaned = stdout.replace(/§./g, "");
-    const m = cleaned.match(/(\d+\.\d+|\d+)/);
-    return m ? parseFloat(m[1]) : null;
+    return null;
 }
 
-// Parse "There are 2 of a max of 20 players online: foo, bar" or
+// "There are 2 of a max of 20 players online: foo, bar" or
 // "There are 2/20 players online: foo, bar".
 function parsePlayers(stdout) {
-    if (!stdout) {
-        return null;
+    for (const line of eachLine(stdout)) {
+        const m = line.match(/There are (\d+)(?:\/| of a max of )(\d+)/i);
+        if (m) {
+            return { current: parseInt(m[1], 10),
+                max: parseInt(m[2], 10) };
+        }
     }
-    const cleaned = stdout.replace(/§./g, "");
-    const m = cleaned.match(/There are (\d+)(?:\/| of a max of )(\d+)/i);
-    if (!m) {
-        return null;
-    }
-    return { current: parseInt(m[1], 10),
-        max: parseInt(m[2], 10) };
+    return null;
 }
 
-// Parse "This server is running Paper version 1.21.4-..." — keep the
+// "This server is running Paper version 1.21.4-..." — keep the
 // distribution + version, drop "(Implementing API version ...)".
 function parseVersion(stdout) {
-    if (!stdout) {
-        return null;
+    for (const line of eachLine(stdout)) {
+        const m = line.match(/running\s+(.+?)(?:\s*\(|$)/i);
+        if (m) {
+            return m[1].trim();
+        }
     }
-    const cleaned = stdout.replace(/§./g, "").trim();
-    const m = cleaned.match(/running\s+(.+?)(?:\s*\(|$)/i);
-    if (m) {
-        return m[1].trim();
-    }
-    // Fallback: vanilla `version` returns "Checking version, please wait..."
-    // and pushes the result via console; otherwise just return first line.
-    return cleaned.split("\n")[0].trim() || null;
+    return null;
 }
 
 export default {
