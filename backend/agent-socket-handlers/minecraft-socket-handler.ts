@@ -12,6 +12,7 @@ import AdmZip from "adm-zip";
 import * as YAML from "yaml";
 import { log } from "../log";
 import { TERMINAL_ROWS } from "../../common/util-common";
+import { getRconSession } from "./minecraft-rcon-session";
 
 const MINECRAFT_IMAGES = [ "itzg/minecraft-server", "itzg/mc-proxy" ];
 
@@ -602,29 +603,17 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                         msg: "Container not running" }, callback);
                     return;
                 }
-                try {
-                    const res = await childProcessAsync.spawn(
-                        "docker",
-                        [ "exec", containerName, "rcon-cli", command ],
-                        { encoding: "utf-8",
-                            timeout: 5000 }
-                    );
-                    const stdout = (res.stdout?.toString() ?? "").replace(/\r/g, "");
-                    const stderr = (res.stderr?.toString() ?? "").replace(/\r/g, "");
-                    const code = typeof res.code === "number" ? res.code : 0;
-                    callbackResult({ ok: code === 0,
-                        stdout,
-                        stderr,
-                        code }, callback);
-                } catch (e: unknown) {
-                    const err = e as { stdout?: Buffer | string, stderr?: Buffer | string, code?: number, message?: string };
-                    callbackResult({
-                        ok: false,
-                        stdout: err.stdout?.toString() ?? "",
-                        stderr: err.stderr?.toString() ?? (err.message ?? ""),
-                        code: typeof err.code === "number" ? err.code : 1,
-                    }, callback);
-                }
+                // Reuse a long-lived `docker exec -i ... rcon-cli` per
+                // container so the Minecraft server logs one TCP
+                // connect/disconnect pair for the whole session, not one
+                // per command. See minecraft-rcon-session.ts.
+                const sessionKey = `${socket.endpoint}::${stackName}::${serviceName}`;
+                const session = getRconSession(sessionKey, containerName);
+                const res = await session.exec(command, 5000);
+                callbackResult({ ok: res.ok,
+                    stdout: res.stdout,
+                    stderr: res.stderr,
+                    code: res.code }, callback);
             } catch (e) {
                 callbackError(e, callback);
             }

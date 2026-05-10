@@ -1,8 +1,8 @@
 <template>
     <transition name="slide-fade" appear>
         <div>
-            <h1 v-if="isAdd" class="mb-3">{{ $t("compose") }}</h1>
-            <h1 v-else class="mb-3">
+            <h1 v-if="isAdd" class="page-title mb-3">{{ $t("compose") }}</h1>
+            <h1 v-else class="page-title mb-3">
                 <Uptime :stack="globalStack" :pill="true" /> {{ stack.name }}
                 <span v-if="$root.agentCount > 1 && endpoint !== ''" class="agent-name">
                     ({{ endpointDisplay }})
@@ -977,6 +977,10 @@ export default {
 .agent-name {
     font-size: 13px;
     color: $dark-font-color3;
+}
+
+.page-title {
+    font-size: 28px;
 }
 
 .mc-panel-wrap {

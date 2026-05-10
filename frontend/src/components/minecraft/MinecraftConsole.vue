@@ -44,11 +44,7 @@
             <div class="mc-charts-col">
                 <div class="mc-info-block mb-2">
                     <div class="mc-info-col">
-                        <div class="mc-info-label">Status</div>
-                        <div class="mc-info-value">
-                            <span :class="statusClass">{{ statusText }}</span>
-                        </div>
-                        <div class="mc-info-label mt-2">Address</div>
+                        <div class="mc-info-label">Address</div>
                         <div class="mc-info-value address-val">{{ serverAddress }}</div>
                         <div class="mc-info-label mt-2">Uptime</div>
                         <div class="mc-info-value">{{ uptimeText }}</div>
@@ -244,14 +240,6 @@ export default {
     computed: {
         isRunning() {
             return this.status === RUNNING;
-        },
-
-        statusText() {
-            return this.isRunning ? "Online" : "Offline";
-        },
-
-        statusClass() {
-            return this.isRunning ? "text-success fw-bold" : "text-danger fw-bold";
         },
 
         resourceLimits() {

@@ -30,12 +30,12 @@
                 </div>
                 <div class="mc-stat-value">{{ playersDisplay }}</div>
             </div>
-            <div class="mc-stat mc-stat--wide">
+            <div class="mc-stat">
                 <div class="mc-stat-label">
                     <font-awesome-icon icon="tag" class="me-1" />
                     Version
                 </div>
-                <div class="mc-stat-value mc-stat-version">{{ versionDisplay }}</div>
+                <div class="mc-stat-value mc-stat-version" :title="versionDisplay">{{ versionDisplay }}</div>
             </div>
         </div>
 
@@ -343,10 +343,6 @@ export default {
     flex-direction: column;
     gap: 2px;
     min-width: 0;
-}
-
-.mc-stat--wide {
-    grid-column: 1 / -1;
 }
 
 .mc-stat-label {
