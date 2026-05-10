@@ -47,8 +47,11 @@
                     Docker Limits
                 </div>
                 <div class="mc-limit-row-grid">
-                    <div class="mc-limit-subsection">
-                        <div class="mc-limit-subsection-title">CPU</div>
+                    <div class="mc-limit-subsection mc-limit-subsection--accent">
+                        <div class="mc-limit-subsection-title">
+                            <font-awesome-icon icon="microchip" class="me-1" />
+                            CPU
+                        </div>
                         <div class="mc-limit-row">
                             <label>Limit (cores)</label>
                             <input
@@ -68,8 +71,11 @@
                             />
                         </div>
                     </div>
-                    <div class="mc-limit-subsection">
-                        <div class="mc-limit-subsection-title">Memory</div>
+                    <div class="mc-limit-subsection mc-limit-subsection--accent">
+                        <div class="mc-limit-subsection-title">
+                            <font-awesome-icon icon="memory" class="me-1" />
+                            Memory
+                        </div>
                         <div class="mc-limit-row">
                             <label>Limit</label>
                             <input
@@ -234,6 +240,20 @@ export default {
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+// Highlight CPU and Memory cards inside Docker Limits so the two
+// most-relevant levers stand out from the surrounding container.
+.mc-limit-subsection--accent {
+    background: rgba(116, 194, 255, 0.06);
+    border-left: 3px solid $primary;
+    border-radius: 6px;
+    padding: 10px 12px;
+    gap: 8px;
+
+    .mc-limit-subsection-title {
+        color: $primary;
+    }
 }
 
 .mc-limit-subsection-title {

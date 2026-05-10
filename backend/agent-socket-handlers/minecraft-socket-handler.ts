@@ -27,6 +27,118 @@ function safePath(stackPath: string, relPath: string): string {
     return resolved;
 }
 
+async function findContainerName(stackPath: string, serviceName: string): Promise<string | null> {
+    try {
+        const res = await childProcessAsync.spawn("docker", [ "compose", "ps", "--format", "json" ], {
+            cwd: stackPath,
+            encoding: "utf-8",
+        });
+        const stdout = res.stdout?.toString() ?? "";
+        for (const line of stdout.split("\n")) {
+            try {
+                const obj = JSON.parse(line);
+                const items = Array.isArray(obj) ? obj : [ obj ];
+                for (const item of items) {
+                    if (item.Service === serviceName || serviceName === "") {
+                        return item.Name as string;
+                    }
+                }
+            } catch (_) { /* skip */ }
+        }
+    } catch (e) {
+        log.warn("findContainerName", "Failed to get container name: " + e);
+    }
+    return null;
+}
+
+async function loadComposeDoc(stackPath: string): Promise<{ doc: YAML.Document.Parsed, actualPath: string }> {
+    const composePath = path.join(stackPath, "compose.yaml");
+    let actualPath = composePath;
+    try {
+        await fsAsync.access(composePath);
+    } catch {
+        actualPath = path.join(stackPath, "compose.yml");
+    }
+    const raw = await fsAsync.readFile(actualPath, "utf-8");
+    const doc = YAML.parseDocument(raw);
+    return { doc,
+        actualPath };
+}
+
+// Read the service's `environment:` (map or seq) into a plain object.
+function readComposeEnv(svc: YAML.YAMLMap): Record<string, string> {
+    const env = svc.get("environment", true) as unknown;
+    const out: Record<string, string> = {};
+    if (env instanceof YAML.YAMLMap) {
+        for (const item of env.items) {
+            const k = item.key instanceof YAML.Scalar ? String(item.key.value) : String(item.key);
+            const v = item.value instanceof YAML.Scalar ? item.value.value : item.value;
+            out[k] = v == null ? "" : String(v);
+        }
+    } else if (env instanceof YAML.YAMLSeq) {
+        for (const item of env.items) {
+            const raw = (item instanceof YAML.Scalar) ? String(item.value) : (typeof item === "string" ? item : "");
+            const eq = raw.indexOf("=");
+            if (eq === -1) {
+                out[raw] = "";
+            } else {
+                out[raw.slice(0, eq)] = raw.slice(eq + 1);
+            }
+        }
+    }
+    return out;
+}
+
+// Write a single env var into the service, preserving the existing
+// representation (YAMLMap vs YAMLSeq). Mirrors the inline helper used by
+// minecraftSetLimits so seq-style envs ("KEY=VAL") aren't clobbered into a map.
+function setEnvVarOnService(svc: YAML.YAMLMap, key: string, value: string | null | undefined) {
+    const empty = value === null || value === undefined || value === "";
+    const env = svc.get("environment", true) as unknown;
+
+    if (env instanceof YAML.YAMLSeq) {
+        let found = -1;
+        for (let i = 0; i < env.items.length; i++) {
+            const item = env.items[i];
+            const raw = (item instanceof YAML.Scalar) ? String(item.value) : (typeof item === "string" ? item : "");
+            const eq = raw.indexOf("=");
+            const k = eq === -1 ? raw : raw.slice(0, eq);
+            if (k === key) {
+                found = i;
+                break;
+            }
+        }
+        if (empty) {
+            if (found !== -1) {
+                env.items.splice(found, 1);
+            }
+        } else {
+            const newScalar = new YAML.Scalar(`${key}=${value}`);
+            if (found !== -1) {
+                env.items[found] = newScalar;
+            } else {
+                env.items.push(newScalar);
+            }
+        }
+        return;
+    }
+
+    if (env instanceof YAML.YAMLMap) {
+        if (empty) {
+            env.delete(key);
+        } else {
+            env.set(key, value);
+        }
+        return;
+    }
+
+    if (!empty) {
+        const m = new YAML.YAMLMap();
+        m.set(key, value);
+        svc.set("environment", m);
+    }
+}
+
 export class MinecraftSocketHandler extends AgentSocketHandler {
     create(socket: DockgeSocket, server: DockgeServer, agentSocket: AgentSocket) {
 
@@ -74,32 +186,7 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                 let terminal = Terminal.getTerminal(terminalName);
 
                 if (!terminal) {
-                    // Get container name from docker compose ps
-                    let containerName: string | null = null;
-                    try {
-                        const res = await childProcessAsync.spawn("docker", [ "compose", "ps", "--format", "json" ], {
-                            cwd: stack.path,
-                            encoding: "utf-8",
-                        });
-                        const stdout = res.stdout?.toString() ?? "";
-                        for (const line of stdout.split("\n")) {
-                            try {
-                                const obj = JSON.parse(line);
-                                const items = Array.isArray(obj) ? obj : [ obj ];
-                                for (const item of items) {
-                                    if (item.Service === serviceName || serviceName === "") {
-                                        containerName = item.Name;
-                                        break;
-                                    }
-                                }
-                                if (containerName) {
-                                    break;
-                                }
-                            } catch (_) { /* skip */ }
-                        }
-                    } catch (e) {
-                        log.warn("minecraftAttach", "Failed to get container name: " + e);
-                    }
+                    const containerName = await findContainerName(stack.path, serviceName);
 
                     if (!containerName) {
                         throw new ValidationError("Container not found or not running");
@@ -346,16 +433,8 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                 const l = limits as Record<string, unknown>;
 
                 const stack = await Stack.getStack(server, stackName);
-                const composePath = path.join(stack.path, "compose.yaml");
-                let actualPath = composePath;
-                try {
-                    await fsAsync.access(composePath);
-                } catch {
-                    actualPath = path.join(stack.path, "compose.yml");
-                }
-
-                const raw = await fsAsync.readFile(actualPath, "utf-8");
-                const doc = YAML.parseDocument(raw);
+                const { doc,
+                    actualPath } = await loadComposeDoc(stack.path);
 
                 const services = doc.get("services") as YAML.YAMLMap | undefined;
                 if (!services || !YAML.isMap(services)) {
@@ -425,57 +504,8 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                 // `environment` key may be a YAMLMap ({KEY: VAL}) or a YAMLSeq
                 // of "KEY=VAL" strings — handle both so we don't clobber the
                 // user's existing style.
-                const setEnvVar = (key: string, value: string | null | undefined) => {
-                    const empty = value === null || value === undefined || value === "";
-                    let env = svc.get("environment", true) as unknown;
-
-                    if (env instanceof YAML.YAMLSeq) {
-                        // Find existing entry "KEY" or "KEY=..."
-                        let found = -1;
-                        for (let i = 0; i < env.items.length; i++) {
-                            const item = env.items[i];
-                            const raw = (item instanceof YAML.Scalar) ? String(item.value) : (typeof item === "string" ? item : "");
-                            const eq = raw.indexOf("=");
-                            const k = eq === -1 ? raw : raw.slice(0, eq);
-                            if (k === key) {
-                                found = i;
-                                break;
-                            }
-                        }
-                        if (empty) {
-                            if (found !== -1) {
-                                env.items.splice(found, 1);
-                            }
-                        } else {
-                            const newScalar = new YAML.Scalar(`${key}=${value}`);
-                            if (found !== -1) {
-                                env.items[found] = newScalar;
-                            } else {
-                                env.items.push(newScalar);
-                            }
-                        }
-                        return;
-                    }
-
-                    if (env instanceof YAML.YAMLMap) {
-                        if (empty) {
-                            env.delete(key);
-                        } else {
-                            env.set(key, value);
-                        }
-                        return;
-                    }
-
-                    // No environment yet — only create when we have a value to set.
-                    if (!empty) {
-                        const m = new YAML.YAMLMap();
-                        m.set(key, value);
-                        svc.set("environment", m);
-                    }
-                };
-
-                setEnvVar("INIT_MEMORY", initMemory || null);
-                setEnvVar("MAX_MEMORY", maxMemory || null);
+                setEnvVarOnService(svc, "INIT_MEMORY", initMemory || null);
+                setEnvVarOnService(svc, "MAX_MEMORY", maxMemory || null);
 
                 const finalEnv = svc.get("environment", true) as unknown;
                 if (finalEnv instanceof YAML.YAMLMap && finalEnv.items.length === 0) {
@@ -486,6 +516,147 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
 
                 await fsAsync.writeFile(actualPath, doc.toString(), "utf-8");
                 callbackResult({ ok: true }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftSetEnv", async (stackName: unknown, serviceName: unknown, envMap: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof serviceName !== "string" || !serviceName) {
+                    throw new ValidationError("Service name must be a non-empty string");
+                }
+                if (!envMap || typeof envMap !== "object" || Array.isArray(envMap)) {
+                    throw new ValidationError("envMap must be an object");
+                }
+                const desired: Record<string, string> = {};
+                for (const [ k, v ] of Object.entries(envMap as Record<string, unknown>)) {
+                    if (!k || typeof k !== "string") {
+                        continue;
+                    }
+                    desired[k] = v == null ? "" : String(v);
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                const { doc,
+                    actualPath } = await loadComposeDoc(stack.path);
+
+                const services = doc.get("services") as YAML.YAMLMap | undefined;
+                if (!services || !YAML.isMap(services)) {
+                    throw new ValidationError("compose has no services map");
+                }
+                const svc = services.get(serviceName) as YAML.YAMLMap | undefined;
+                if (!svc || !YAML.isMap(svc)) {
+                    throw new ValidationError(`Service ${serviceName} not found in compose`);
+                }
+
+                // Diff existing env against desired and apply changes,
+                // preserving the existing map/seq representation.
+                const existing = readComposeEnv(svc);
+                for (const k of Object.keys(existing)) {
+                    if (!(k in desired)) {
+                        setEnvVarOnService(svc, k, null);
+                    }
+                }
+                for (const [ k, v ] of Object.entries(desired)) {
+                    setEnvVarOnService(svc, k, v);
+                }
+
+                const finalEnv = svc.get("environment", true) as unknown;
+                if (finalEnv instanceof YAML.YAMLMap && finalEnv.items.length === 0) {
+                    svc.delete("environment");
+                } else if (finalEnv instanceof YAML.YAMLSeq && finalEnv.items.length === 0) {
+                    svc.delete("environment");
+                }
+
+                await fsAsync.writeFile(actualPath, doc.toString(), "utf-8");
+                callbackResult({ ok: true }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftRconExec", async (stackName: unknown, serviceName: unknown, command: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof serviceName !== "string") {
+                    throw new ValidationError("Service name must be a string");
+                }
+                if (typeof command !== "string" || !command.trim()) {
+                    throw new ValidationError("Command must be a non-empty string");
+                }
+                // rcon-cli accepts the command as a single argument; pass it
+                // verbatim. Container-level isolation makes shell injection
+                // through the docker exec argv non-applicable here.
+                const stack = await Stack.getStack(server, stackName);
+                const containerName = await findContainerName(stack.path, serviceName);
+                if (!containerName) {
+                    callbackResult({ ok: false,
+                        msg: "Container not running" }, callback);
+                    return;
+                }
+                try {
+                    const res = await childProcessAsync.spawn(
+                        "docker",
+                        [ "exec", containerName, "rcon-cli", command ],
+                        { encoding: "utf-8",
+                            timeout: 5000 }
+                    );
+                    const stdout = (res.stdout?.toString() ?? "").replace(/\r/g, "");
+                    const stderr = (res.stderr?.toString() ?? "").replace(/\r/g, "");
+                    const code = typeof res.code === "number" ? res.code : 0;
+                    callbackResult({ ok: code === 0,
+                        stdout,
+                        stderr,
+                        code }, callback);
+                } catch (e: unknown) {
+                    const err = e as { stdout?: Buffer | string, stderr?: Buffer | string, code?: number, message?: string };
+                    callbackResult({
+                        ok: false,
+                        stdout: err.stdout?.toString() ?? "",
+                        stderr: err.stderr?.toString() ?? (err.message ?? ""),
+                        code: typeof err.code === "number" ? err.code : 1,
+                    }, callback);
+                }
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftInspect", async (stackName: unknown, serviceName: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof serviceName !== "string") {
+                    throw new ValidationError("Service name must be a string");
+                }
+                const stack = await Stack.getStack(server, stackName);
+                const containerName = await findContainerName(stack.path, serviceName);
+                if (!containerName) {
+                    callbackResult({ ok: false,
+                        msg: "Container not running" }, callback);
+                    return;
+                }
+                const res = await childProcessAsync.spawn(
+                    "docker",
+                    [ "inspect", "--format", "{{.State.StartedAt}}|{{.State.Status}}", containerName ],
+                    { encoding: "utf-8",
+                        timeout: 5000 }
+                );
+                const stdout = (res.stdout?.toString() ?? "").trim();
+                const [ startedAt, status ] = stdout.split("|");
+                callbackResult({ ok: true,
+                    startedAt: startedAt || "",
+                    status: status || "" }, callback);
             } catch (e) {
                 callbackError(e, callback);
             }

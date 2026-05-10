@@ -48,12 +48,15 @@ COPY --chown=node:node . .
 # Overlay built frontend assets AFTER source copy to avoid overwrite
 COPY --chown=node:node --from=build /app/frontend-dist /app/frontend-dist
 
-RUN mkdir -p ./data
+RUN mkdir -p ./data && chown -R node:node ./data
 
 ENV UV_USE_IO_URING=0
 
 VOLUME /app/data
 EXPOSE 5001
+
+USER node
+
 HEALTHCHECK --interval=60s --timeout=30s --start-period=60s --retries=5 CMD extra/healthcheck
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["tsx", "./backend/index.ts"]

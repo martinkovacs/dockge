@@ -980,11 +980,19 @@ export default {
 }
 
 .mc-panel-wrap {
-    // Fill the viewport so the Minecraft panel (terminal + charts/files)
-    // expands to use all available vertical space by default.
-    min-height: calc(100vh - 220px);
+    // Bound the Minecraft panel to the viewport so its children (file
+    // browser, terminal) scroll internally instead of pushing the whole
+    // page down. On mobile we drop this so the page itself scrolls — the
+    // mobile layout stacks vertically and would otherwise crush the
+    // terminal + charts into a tiny window.
+    height: calc(100vh - 220px);
     display: flex;
     flex-direction: column;
+
+    @media (max-width: $bp-mobile) {
+        height: auto;
+        min-height: calc(100vh - 220px);
+    }
 }
 
 // Drop borders from action-bar buttons. .btn-danger's border-color matches

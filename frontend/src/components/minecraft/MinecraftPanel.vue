@@ -35,6 +35,17 @@
                     Limits
                 </a>
             </li>
+            <li class="nav-item">
+                <a
+                    class="nav-link"
+                    :class="{ active: activeTab === 'settings' }"
+                    href="#"
+                    @click.prevent="activeTab = 'settings'"
+                >
+                    <font-awesome-icon icon="cog" class="me-1" />
+                    Settings
+                </a>
+            </li>
         </ul>
 
         <!-- Tab content -->
@@ -62,6 +73,14 @@
                 :json-config="jsonConfig"
                 @saved="$emit('limits-saved')"
             />
+            <MinecraftSettings
+                v-if="activeTab === 'settings'"
+                :endpoint="endpoint"
+                :stack-name="stackName"
+                :service-name="minecraftServiceName"
+                :json-config="jsonConfig"
+                @saved="$emit('limits-saved')"
+            />
         </div>
     </div>
 </template>
@@ -71,6 +90,7 @@ import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import MinecraftConsole from "./MinecraftConsole.vue";
 import MinecraftFiles from "./MinecraftFiles.vue";
 import MinecraftLimits from "./MinecraftLimits.vue";
+import MinecraftSettings from "./MinecraftSettings.vue";
 
 const MINECRAFT_IMAGES = [ "itzg/minecraft-server", "itzg/mc-proxy" ];
 
@@ -78,7 +98,8 @@ export default {
     components: { FontAwesomeIcon,
         MinecraftConsole,
         MinecraftFiles,
-        MinecraftLimits },
+        MinecraftLimits,
+        MinecraftSettings },
 
     props: {
         endpoint: { type: String,
@@ -160,6 +181,20 @@ export default {
     > * {
         flex: 1;
         min-height: 0;
+    }
+}
+
+@media (max-width: $bp-mobile) {
+    // On mobile the stacked terminal + charts naturally overflow the
+    // viewport; let the page scroll the whole panel rather than clipping
+    // it. Each tab body still scrolls internally for desktop.
+    .mc-panel-content {
+        overflow: visible;
+
+        > * {
+            flex: 0 0 auto;
+            min-height: 0;
+        }
     }
 }
 </style>

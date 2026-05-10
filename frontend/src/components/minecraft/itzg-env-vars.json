@@ -1,0 +1,510 @@
+{
+    "_source": "https://docker-minecraft-server.readthedocs.io/en/latest/variables/",
+    "_note": "Generated from docs/variables.md in itzg/docker-minecraft-server. Re-fetch from https://raw.githubusercontent.com/itzg/docker-minecraft-server/master/docs/variables.md when refreshing.",
+    "vars": [
+        {
+            "name": "AUTOPAUSE_KNOCK_INTERFACE",
+            "description": "Describes the interface passed to the knockd daemon. If the default interface does not work, run the ifconfig command inside the container and derive the interface receiving the incoming connection from its output. The passed interface must exist inside the container. Using the loopback interface (lo) does likely not yield the desired results.",
+            "default": "eth0",
+            "category": "Auto-Pause"
+        },
+        {
+            "name": "AUTOPAUSE_PERIOD",
+            "description": "describes period of the daemonized state machine, that handles the pausing of the process",
+            "default": "10",
+            "category": "Auto-Pause"
+        },
+        {
+            "name": "AUTOPAUSE_TIMEOUT_EST",
+            "description": "describes the time between the last client disconnect and the pausing of the process",
+            "default": "3600",
+            "category": "Auto-Pause"
+        },
+        {
+            "name": "AUTOPAUSE_TIMEOUT_INIT",
+            "description": "describes the time between server start and the pausing of the process, when no client connects in-between",
+            "default": "600",
+            "category": "Auto-Pause"
+        },
+        {
+            "name": "AUTOPAUSE_TIMEOUT_KN",
+            "description": "describes the time between knocking of the port (e.g. by the main menu ping) and the pausing of the process, when no client connects in-between",
+            "default": "120",
+            "category": "Auto-Pause"
+        },
+        {
+            "name": "AUTOSTOP_PERIOD",
+            "description": "describes period of the daemonized state machine, that handles the stopping of the serve",
+            "default": "10",
+            "category": "Auto-Stop"
+        },
+        {
+            "name": "AUTOSTOP_TIMEOUT_EST",
+            "description": "describes the time between the last client disconnect and the stopping of the server",
+            "default": "3600",
+            "category": "Auto-Stop"
+        },
+        {
+            "name": "AUTOSTOP_TIMEOUT_INIT",
+            "description": "describes the time between server start and the stopping of the server, when no client connects in-between",
+            "default": "1800",
+            "category": "Auto-Stop"
+        },
+        {
+            "name": "BROADCAST_RCON_TO_OPS",
+            "description": "Sets broadcast-rcon-to-ops server property",
+            "default": "false",
+            "category": "RCON"
+        },
+        {
+            "name": "CF_API_KEY",
+            "description": "YOUR CurseForge (Eternal) API Key.",
+            "default": "",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_API_KEY_FILE",
+            "description": "A path to a file inside of container that contains YOUR CurseForge (Eternal) API Key.",
+            "default": "",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_EXCLUDE_INCLUDE_FILE",
+            "description": "Global and per modpack exclusions can be declared in a JSON file and referenced with this variable. By default, the file bundled with the image will be used, but can be disabled by setting this to an empty string. The schema of this file is documented here.",
+            "default": "",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_EXCLUDE_MODS",
+            "description": "Mods can be excluded by passing a comma or space delimited list of project slugs or IDs",
+            "default": "",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_FILE_ID",
+            "description": "The mod curseforge numerical ID.",
+            "default": "",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_FILENAME_MATCHER",
+            "description": "Specify a substring to match the desired filename",
+            "default": "",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_FORCE_INCLUDE_MODS",
+            "description": "Mods can be included by passing a comma or space delimited list of project slugs or IDs",
+            "default": "",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_FORCE_SYNCHRONIZE",
+            "description": "Forces the excludes/includes to be re-evaluated",
+            "default": "",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_MOD_LOADER_VERSION",
+            "description": "Override the mod loader version declared by the modpack",
+            "default": "",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_OVERRIDES_SKIP_EXISTING",
+            "description": "if set, files in the overrides that already exist in the data directory are skipped. world data is always skipped, if present.",
+            "default": "false",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_PAGE_URL",
+            "description": "Pass a page URL to the modpack or a specific file",
+            "default": "",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_PARALLEL_DOWNLOADS",
+            "description": "specify how many parallel mod downloads to perform",
+            "default": "4",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_SET_LEVEL_FROM",
+            "description": "Some modpacks come with world/save data via a worlds file and/or the overrides provided with the modpack. Either approach can be selected to set the LEVEL to the resulting saves directory by setting this to either: WORLD_FILE; OVERRIDES;",
+            "default": "",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CF_SLUG",
+            "description": "Instead of a URL, the modpack slug can be provided.",
+            "default": "",
+            "category": "CurseForge"
+        },
+        {
+            "name": "CONSOLE",
+            "description": "Some older versions (pre-1.14) of Spigot required --noconsole to be passed when detaching stdin",
+            "default": "TRUE",
+            "category": "Server"
+        },
+        {
+            "name": "DEBUG_AUTOPAUSE",
+            "description": "Adds additional debugging output for AutoPause",
+            "default": "false",
+            "category": "Auto-Pause"
+        },
+        {
+            "name": "DEBUG_AUTOSTOP",
+            "description": "Adds additional logging for AutoStop",
+            "default": "false",
+            "category": "Auto-Stop"
+        },
+        {
+            "name": "DIFFICULTY",
+            "description": "The difficulty level. Available values: peaceful,easy,normal,hard",
+            "default": "easy",
+            "category": "Server"
+        },
+        {
+            "name": "ENABLE_AUTOPAUSE",
+            "description": "Enable the Autopause functionality",
+            "default": "FALSE",
+            "category": "Auto-Pause"
+        },
+        {
+            "name": "ENABLE_AUTOSTOP",
+            "description": "Enable the AutoStop functionality",
+            "default": "FALSE",
+            "category": "Auto-Stop"
+        },
+        {
+            "name": "ENABLE_JMX",
+            "description": "To enable remote JMX, such as for profiling with VisualVM or JMC, add the environment variable ENABLE_JMX=true",
+            "default": "false",
+            "category": "General options"
+        },
+        {
+            "name": "ENABLE_RCON",
+            "description": "Enable/disable RCON support; however, be aware that disabling RCON will remove and limit some features, such as interactive and color console support.",
+            "default": "true",
+            "category": "RCON"
+        },
+        {
+            "name": "ENABLE_ROLLING_LOGS",
+            "description": "Legacy option. Rolling logs are now enabled by default via templated log4j2 configuration. This option is maintained for backward compatibility but only used for error reporting",
+            "default": "false",
+            "category": "General options"
+        },
+        {
+            "name": "ENABLE_WHITELIST",
+            "description": "Enable the whitelist to manually manage the whitelist",
+            "default": "false",
+            "category": "Whitelist"
+        },
+        {
+            "name": "EULA",
+            "description": "You MUST set this to true",
+            "default": "",
+            "category": "Server"
+        },
+        {
+            "name": "EXTRA_ARGS",
+            "description": "Arguments that would usually be passed to the jar file (those which are written after the filename)",
+            "default": "",
+            "category": "General options"
+        },
+        {
+            "name": "GID",
+            "description": "The linux group id to run as",
+            "default": "1000",
+            "category": "General options"
+        },
+        {
+            "name": "GUI",
+            "description": "Some older servers get confused and think that the GUI interface is enabled.",
+            "default": "TRUE",
+            "category": "Server"
+        },
+        {
+            "name": "ICON",
+            "description": "The url or file path for the icon image to use for the server. It will be downloaded, scaled, and converted to the proper format.",
+            "default": "",
+            "category": "Server"
+        },
+        {
+            "name": "INIT_MEMORY",
+            "description": "Independently sets the initial heap size",
+            "default": "1G",
+            "category": "General options"
+        },
+        {
+            "name": "JMX_HOST",
+            "description": "If JMX is enabled, set JMX_HOST to the IP/host running the Docker container, and add a port forwarding of TCP port 7091",
+            "default": "",
+            "category": "General options"
+        },
+        {
+            "name": "JVM_DD_OPTS",
+            "description": "As a shorthand for passing several system properties as -D arguments, you can instead pass a comma separated list of name=value or name:value pairs with JVM_DD_OPTS. (The colon syntax is provided for management platforms like Plesk that don't allow = inside a value.)",
+            "default": "",
+            "category": "General options"
+        },
+        {
+            "name": "JVM_OPTS",
+            "description": "General JVM options can be passed to the Minecraft Server invocation by passing a JVM_OPTS environment variable. The JVM requires -XX options to precede -X options, so those can be declared in JVM_XX_OPTS. Both variables are space-delimited, raw JVM arguments",
+            "default": "",
+            "category": "General options"
+        },
+        {
+            "name": "JVM_XX_OPTS",
+            "description": "General JVM options can be passed to the Minecraft Server invocation by passing a JVM_OPTS environment variable. The JVM requires -XX options to precede -X options, so those can be declared in JVM_XX_OPTS. Both variables are space-delimited, raw JVM arguments",
+            "default": "",
+            "category": "General options"
+        },
+        {
+            "name": "LEVEL",
+            "description": "Maps to the level-name server property. You can either switch between world saves or run multiple containers with different saves by using the LEVEL option",
+            "default": "world",
+            "category": "Server"
+        },
+        {
+            "name": "LOG_CONSOLE_FORMAT",
+            "description": "Log4j2 pattern for console output (what you see in docker logs)",
+            "default": "[%d{HH:mm:ss}] [%t/%level]: %msg%n",
+            "category": "General options"
+        },
+        {
+            "name": "LOG_FILE_FORMAT",
+            "description": "Log4j2 pattern for file logs (written to logs/latest.log)",
+            "default": "[%d{HH:mm:ss}] [%t/%level]: %msg%n",
+            "category": "General options"
+        },
+        {
+            "name": "LOG_LEVEL",
+            "description": "Root logger level (trace, debug, info, warn, error)",
+            "default": "info",
+            "category": "General options"
+        },
+        {
+            "name": "LOG_TERMINAL_FORMAT",
+            "description": "Log4j2 pattern for interactive terminal console (used with docker attach)",
+            "default": "[%d{HH:mm:ss} %level]: %msg%n",
+            "category": "General options"
+        },
+        {
+            "name": "LOG_TIMESTAMP",
+            "description": "To include the timestamp with each log set to true",
+            "default": "false",
+            "category": "General options"
+        },
+        {
+            "name": "MAX_MEMORY",
+            "description": "independently sets the max heap size",
+            "default": "1G",
+            "category": "General options"
+        },
+        {
+            "name": "MEMORY",
+            "description": "The image declares an initial and maximum Java memory-heap limit of 1 GB.",
+            "default": "1G",
+            "category": "General options"
+        },
+        {
+            "name": "MODE",
+            "description": "Minecraft servers are configured to run in Survival mode by default. You can change the mode using MODE where you can either provide the standard numerical values or the shortcut values: creative; survival; adventure; spectator(minecraft 1.8 or later);",
+            "default": "",
+            "category": "Server"
+        },
+        {
+            "name": "MOTD",
+            "description": "Set the server log in message.",
+            "default": "",
+            "category": "Server"
+        },
+        {
+            "name": "OVERRIDE_ICON",
+            "description": "The server icon which has been set doesn't get overridden by default. Set this to TRUE to override the icon",
+            "default": "FALSE",
+            "category": "Server"
+        },
+        {
+            "name": "OVERRIDE_WHITELIST",
+            "description": "Enforce regeneration of the whitelist on each server startup.",
+            "default": "false",
+            "category": "Whitelist"
+        },
+        {
+            "name": "PROXY",
+            "description": "You may configure the use of an HTTP/HTTPS proxy by passing the proxy's URL",
+            "default": "false",
+            "category": "Server"
+        },
+        {
+            "name": "RCON_CMDS_FIRST_CONNECT",
+            "description": "RCON commands to execute on the first client connection to the server.",
+            "default": "",
+            "category": "RCON"
+        },
+        {
+            "name": "RCON_CMDS_LAST_DISCONNECT",
+            "description": "RCON commands to execute when the last client disconnects from the server.",
+            "default": "",
+            "category": "RCON"
+        },
+        {
+            "name": "RCON_CMDS_ON_CONNECT",
+            "description": "RCON commands to execute whenever a client connects to the server.",
+            "default": "",
+            "category": "RCON"
+        },
+        {
+            "name": "RCON_CMDS_ON_DISCONNECT",
+            "description": "RCON commands to execute whenever a client disconnects from the server.",
+            "default": "",
+            "category": "RCON"
+        },
+        {
+            "name": "RCON_CMDS_STARTUP",
+            "description": "RCON commands to execute when the server starts.",
+            "default": "",
+            "category": "RCON"
+        },
+        {
+            "name": "RCON_PASSWORD",
+            "description": "You MUST change this value",
+            "default": "",
+            "category": "RCON"
+        },
+        {
+            "name": "RCON_PASSWORD_FILE",
+            "description": "Can be set to read the RCON password from a file. Overrides RCON_PASSWORD if both are set.",
+            "default": "",
+            "category": "RCON"
+        },
+        {
+            "name": "RCON_PORT",
+            "description": "The port for RCON",
+            "default": "25575",
+            "category": "RCON"
+        },
+        {
+            "name": "RESOURCE_PACK",
+            "description": "A link to a custom resource pack",
+            "default": "",
+            "category": "Custom resource pack"
+        },
+        {
+            "name": "RESOURCE_PACK_ENFORCE",
+            "description": "Enforce the resource pack on clients",
+            "default": "FALSE",
+            "category": "Custom resource pack"
+        },
+        {
+            "name": "RESOURCE_PACK_SHA1",
+            "description": "The checksum for the custom resource pack",
+            "default": "",
+            "category": "Custom resource pack"
+        },
+        {
+            "name": "ROLLING_LOG_FILE_PATTERN",
+            "description": "Pattern for rolled/archived log file names",
+            "default": "logs/%d{yyyy-MM-dd}-%i.log.gz",
+            "category": "General options"
+        },
+        {
+            "name": "ROLLING_LOG_MAX_FILES",
+            "description": "Maximum number of archived log files to keep",
+            "default": "1000",
+            "category": "General options"
+        },
+        {
+            "name": "SERVER_PORT",
+            "description": "Maps to the server-port server property. Only change this value if you know what you're doing. It is only needed when using host networking and it is rare that host networking should be used.",
+            "default": "",
+            "category": "Server"
+        },
+        {
+            "name": "SETUP_ONLY",
+            "description": "If you are using a host-attached data directory, then you can have the image setup the Minecraft server files and stop prior to launching the server process by setting this to true",
+            "default": "false",
+            "category": "Server"
+        },
+        {
+            "name": "STOP_DURATION",
+            "description": "When the container is signalled to stop, the Minecraft process wrapper will attempt to send a \"stop\" command via RCON or console and waits for the process to gracefully finish.",
+            "default": "60",
+            "category": "Server"
+        },
+        {
+            "name": "STOP_SERVER_ANNOUNCE_DELAY",
+            "description": "To allow time for players to finish what they're doing during a graceful server shutdown, set STOP_SERVER_ANNOUNCE_DELAY to a number of seconds to delay after an announcement is posted by the server.",
+            "default": "",
+            "category": "Server"
+        },
+        {
+            "name": "TZ",
+            "description": "You can configure the timezone to match yours by setting the TZ environment variable. alternatively, you can mount: /etc/localtime:/etc/localtime:ro /etc/timezone:/etc/timezone:ro",
+            "default": "UTC",
+            "category": "General options"
+        },
+        {
+            "name": "TYPE",
+            "description": "The server type",
+            "default": "VANILLA",
+            "category": "Server"
+        },
+        {
+            "name": "UID",
+            "description": "The linux user id to run as",
+            "default": "1000",
+            "category": "General options"
+        },
+        {
+            "name": "USE_AIKAR_FLAGS",
+            "description": "Aikar has done some research into finding the optimal JVM flags for GC tuning, which becomes more important as more users are connected concurrently",
+            "default": "false",
+            "category": "General options"
+        },
+        {
+            "name": "USE_FLARE_FLAGS",
+            "description": "To enable the JVM flags required to fully support the Flare profiling suite.",
+            "default": "",
+            "category": "Server"
+        },
+        {
+            "name": "USE_MEOWICE_FLAGS",
+            "description": "MeowIce has created an updated set of JVM flags based on Aikar's flags but with support for optimizations for Java 17 and above",
+            "default": "false",
+            "category": "General options"
+        },
+        {
+            "name": "USE_MEOWICE_GRAALVM_FLAGS",
+            "description": "enables MeowIce's flags for GraalVM if USE_MEOWICE_GRAALVM_FLAGS is TRUE",
+            "default": "true",
+            "category": "General options"
+        },
+        {
+            "name": "USE_SIMD_FLAGS",
+            "description": "Support for optimized SIMD operation",
+            "default": "false",
+            "category": "Server"
+        },
+        {
+            "name": "VERSION",
+            "description": "The minecraft version",
+            "default": "LATEST",
+            "category": "Server"
+        },
+        {
+            "name": "WHITELIST",
+            "description": "A list of usernames and/or UUIDs separated by comma",
+            "default": "",
+            "category": "Whitelist"
+        },
+        {
+            "name": "WHITELIST_FILE",
+            "description": "A url or file path to a whitelist json formatted file.",
+            "default": "",
+            "category": "Whitelist"
+        }
+    ]
+}

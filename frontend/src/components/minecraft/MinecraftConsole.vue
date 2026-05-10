@@ -50,6 +50,8 @@
                         </div>
                         <div class="mc-info-label mt-2">Address</div>
                         <div class="mc-info-value address-val">{{ serverAddress }}</div>
+                        <div class="mc-info-label mt-2">Uptime</div>
+                        <div class="mc-info-value">{{ uptimeText }}</div>
                     </div>
                     <div v-if="limitSections.length" class="mc-info-col mc-info-col-limits">
                         <div
@@ -71,6 +73,13 @@
                         </div>
                     </div>
                 </div>
+                <MinecraftStatsCard
+                    :endpoint="endpoint"
+                    :stack-name="stackName"
+                    :service-name="serviceName"
+                    :status="status"
+                    class="mb-2"
+                />
                 <MiniChart
                     label="CPU"
                     :datasets="cpuDatasets"
@@ -98,9 +107,37 @@
 <script>
 import Terminal from "../Terminal.vue";
 import MiniChart from "./MiniChart.vue";
+import MinecraftStatsCard from "./MinecraftStatsCard.vue";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import { RUNNING } from "../../../../common/util-common";
 import { readResourceLimits, readJvmMemory } from "./mcCompose";
+
+function formatUptime(startedAt) {
+    if (!startedAt) {
+        return "—";
+    }
+    const start = new Date(startedAt).getTime();
+    if (!start || Number.isNaN(start)) {
+        return "—";
+    }
+    let secs = Math.max(0, Math.floor((Date.now() - start) / 1000));
+    const days = Math.floor(secs / 86400);
+    secs -= days * 86400;
+    const hours = Math.floor(secs / 3600);
+    secs -= hours * 3600;
+    const mins = Math.floor(secs / 60);
+    secs -= mins * 60;
+    if (days > 0) {
+        return `${days}d ${hours}h ${mins}m`;
+    }
+    if (hours > 0) {
+        return `${hours}h ${mins}m`;
+    }
+    if (mins > 0) {
+        return `${mins}m ${secs}s`;
+    }
+    return `${secs}s`;
+}
 
 const HISTORY = 60;
 
@@ -165,6 +202,7 @@ function parseNetIO(str) {
 export default {
     components: { Terminal,
         MiniChart,
+        MinecraftStatsCard,
         FontAwesomeIcon },
 
     props: {
@@ -190,6 +228,10 @@ export default {
             attaching: false,
             reattachTimer: null,
             cmdInput: "",
+            startedAt: "",
+            uptimeTick: 0,
+            inspectTimer: null,
+            uptimeTimer: null,
             cpuHistory: Array(HISTORY).fill(0),
             memHistory: Array(HISTORY).fill(0),
             netRxHistory: Array(HISTORY).fill(0),
@@ -265,6 +307,16 @@ export default {
             }
 
             return sections;
+        },
+
+        uptimeText() {
+            // Re-evaluated on uptimeTick changes so the ticker re-renders.
+            // eslint-disable-next-line no-unused-expressions
+            this.uptimeTick;
+            if (!this.isRunning) {
+                return "—";
+            }
+            return formatUptime(this.startedAt);
         },
 
         serverAddress() {
@@ -351,9 +403,12 @@ export default {
         isRunning(val) {
             if (val) {
                 this.attach();
+                this.startUptimePolling();
             } else {
                 this.terminalName = "";
                 this.attaching = false;
+                this.stopUptimePolling();
+                this.startedAt = "";
             }
         },
 
@@ -387,6 +442,7 @@ export default {
     mounted() {
         if (this.isRunning) {
             this.attach();
+            this.startUptimePolling();
         }
     },
 
@@ -395,6 +451,7 @@ export default {
             clearTimeout(this.reattachTimer);
             this.reattachTimer = null;
         }
+        this.stopUptimePolling();
         if (this.terminalName) {
             this.$root.emitAgent(this.endpoint, "leaveCombinedTerminal", this.stackName, () => {});
         }
@@ -412,6 +469,40 @@ export default {
                     this.terminalName = res.terminalName;
                 } else {
                     this.$root.toastError(res.msg || "Failed to connect to server console");
+                }
+            });
+        },
+
+        startUptimePolling() {
+            this.stopUptimePolling();
+            this.fetchUptime();
+            // Re-fetch the container's StartedAt every 30s so we catch
+            // restarts. The displayed value advances every second via
+            // uptimeTimer below.
+            this.inspectTimer = setInterval(() => this.fetchUptime(), 30000);
+            this.uptimeTimer = setInterval(() => {
+                this.uptimeTick = (this.uptimeTick + 1) % 1_000_000;
+            }, 1000);
+        },
+
+        stopUptimePolling() {
+            if (this.inspectTimer) {
+                clearInterval(this.inspectTimer);
+                this.inspectTimer = null;
+            }
+            if (this.uptimeTimer) {
+                clearInterval(this.uptimeTimer);
+                this.uptimeTimer = null;
+            }
+        },
+
+        fetchUptime() {
+            if (!this.isRunning || !this.serviceName) {
+                return;
+            }
+            this.$root.emitAgent(this.endpoint, "minecraftInspect", this.stackName, this.serviceName, (res) => {
+                if (res && res.ok) {
+                    this.startedAt = res.startedAt || "";
                 }
             });
         },
@@ -657,14 +748,23 @@ export default {
 @media (max-width: $bp-mobile) {
     .mc-main-row {
         flex-direction: column;
+        // Drop the parent's flex:1 + min-height:0 contract on mobile —
+        // when the column is stacked, we want it to grow to fit the
+        // terminal AND the full height of every chart, not split a
+        // fixed viewport between them (which collapses chart canvases).
+        flex: 0 0 auto;
+        min-height: 0;
     }
 
     .mc-terminal-col {
         width: 100%;
+        // Terminal still gets a fixed-ish minimum so the xterm is usable.
+        flex: 0 0 auto;
     }
 
     .mc-terminal-wrap {
         min-height: 320px;
+        height: 320px;
     }
 
     .mc-charts-col {
@@ -673,7 +773,15 @@ export default {
         display: flex;
         flex-direction: column;
         gap: 8px;
-        flex-shrink: 1;
+        flex: 0 0 auto;
+
+        // Give each chart a fixed height on mobile so they don't fight
+        // the terminal for vertical space (which previously zero-sized
+        // the canvases).
+        > :deep(.mini-chart-wrapper) {
+            flex: 0 0 auto;
+            height: 130px;
+        }
     }
 }
 </style>
