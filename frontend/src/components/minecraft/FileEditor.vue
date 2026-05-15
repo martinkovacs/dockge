@@ -1,18 +1,26 @@
 <template>
-    <BModal
-        v-model="show"
-        size="xl"
-        centered
-        :title="dirPath || filePath"
-        :ok-title="saving ? 'Saving...' : 'Save'"
-        cancel-title="Cancel"
-        :ok-disabled="saving"
-        @ok.prevent="save"
-        @hidden="$emit('close')"
-    >
-        <div class="mb-2">
-            <label class="form-label filename-label">Filename</label>
-            <input v-model="fileName" class="form-control form-control-sm font-mono" />
+    <div class="file-editor-inline">
+        <div class="file-editor-header">
+            <button
+                class="btn btn-sm btn-normal"
+                title="Back"
+                @click="$emit('close')"
+            >
+                <font-awesome-icon icon="chevron-left" />
+            </button>
+            <div class="file-editor-path">
+                <span v-if="dirPath" class="text-secondary">{{ dirPath }}/</span>
+                <input v-model="fileName" class="form-control form-control-sm font-mono filename-input" />
+            </div>
+            <button
+                class="btn btn-sm btn-primary"
+                :disabled="saving"
+                @click="save"
+            >
+                <font-awesome-icon v-if="saving" icon="spinner" spin class="me-1" />
+                <font-awesome-icon v-else icon="save" class="me-1" />
+                {{ saving ? 'Saving...' : 'Save' }}
+            </button>
         </div>
         <div class="editor-box">
             <code-mirror
@@ -24,10 +32,11 @@
                 tab="true"
             />
         </div>
-    </BModal>
+    </div>
 </template>
 
 <script>
+import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import CodeMirror from "vue-codemirror6";
 import { yaml } from "@codemirror/lang-yaml";
 import { python } from "@codemirror/lang-python";
@@ -35,7 +44,6 @@ import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
 import { dracula as editorTheme } from "thememirror";
 import { lineNumbers } from "@codemirror/view";
-import { BModal } from "bootstrap-vue-next";
 
 function extensionsForFile(filename) {
     const ext = (filename.split(".").pop() || "").toLowerCase();
@@ -54,7 +62,7 @@ function extensionsForFile(filename) {
 
 export default {
     components: { CodeMirror,
-        BModal },
+        FontAwesomeIcon },
 
     props: {
         filePath: {
@@ -79,7 +87,6 @@ export default {
 
     data() {
         return {
-            show: true,
             localContent: this.content,
             saving: false,
             fileName: this.filePath.split("/").pop(),
@@ -110,7 +117,6 @@ export default {
                     if (res.ok) {
                         this.$root.toastSuccess("File saved");
                         this.$emit("saved");
-                        this.show = false;
                     } else {
                         this.$root.toastError(res.msg || "Failed to save");
                     }
@@ -135,10 +141,36 @@ export default {
 </script>
 
 <style scoped lang="scss">
-.filename-label {
-    font-size: 12px;
-    color: #888;
-    margin-bottom: 4px;
+@import "../../styles/vars.scss";
+
+.file-editor-inline {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.file-editor-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.file-editor-path {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+}
+
+.filename-input {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    max-width: 320px;
 }
 
 .font-mono {
@@ -147,10 +179,12 @@ export default {
 }
 
 .editor-box {
+    flex: 1;
+    min-height: 0;
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
-    min-height: 400px;
-    max-height: 60vh;
-    overflow-y: auto;
+    overflow: auto;
+    border: 1px solid $dark-border-color;
+    border-radius: 6px;
 }
 </style>

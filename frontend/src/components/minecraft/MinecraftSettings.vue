@@ -19,7 +19,9 @@
                     v-for="v in itzgVars"
                     :key="v.name"
                     :value="v.name"
-                >{{ v.description }}</option>
+                >
+                    {{ v.description }}
+                </option>
             </datalist>
 
             <div class="mc-env-rows">

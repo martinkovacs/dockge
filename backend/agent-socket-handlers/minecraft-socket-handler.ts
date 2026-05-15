@@ -6,15 +6,135 @@ import { AgentSocket } from "../../common/agent-socket";
 import { Settings } from "../settings";
 import { InteractiveTerminal, Terminal } from "../terminal";
 import childProcessAsync from "promisify-child-process";
+import { spawn, ChildProcess } from "child_process";
 import { promises as fsAsync } from "fs";
 import path from "path";
 import AdmZip from "adm-zip";
 import * as YAML from "yaml";
 import { log } from "../log";
 import { TERMINAL_ROWS } from "../../common/util-common";
+import { LimitQueue } from "../utils/limit-queue";
 import { getRconSession } from "./minecraft-rcon-session";
 
 const MINECRAFT_IMAGES = [ "itzg/minecraft-server", "itzg/mc-proxy" ];
+
+// Server-log history that outlives the docker-attach PTY. A long-running
+// `docker logs -f` follower per (stack, service) writes into a ring buffer;
+// the buffer is replayed when a client (re)attaches, so the terminal keeps
+// the previous run's tail across container restarts and page refreshes.
+// Cleared explicitly when the stack is stopped (`minecraftClearHistory`).
+type HistoryEntry = {
+    buffer: LimitQueue<string>;
+    follower: ChildProcess | null;
+    stackPath: string;
+    serviceName: string;
+    respawnTimer: NodeJS.Timeout | null;
+    closing: boolean;
+};
+
+// ~4000 chunks of pty output — well above docker logs --tail and enough to
+// hold the previous run + several minutes of the current run.
+const HISTORY_LIMIT = 4000;
+const RESPAWN_DELAY_MS = 2000;
+
+const historyMap = new Map<string, HistoryEntry>();
+
+function getHistoryEntry(terminalName: string, stackPath: string, serviceName: string): HistoryEntry {
+    let entry = historyMap.get(terminalName);
+    if (!entry) {
+        entry = {
+            buffer: new LimitQueue<string>(HISTORY_LIMIT),
+            follower: null,
+            stackPath,
+            serviceName,
+            respawnTimer: null,
+            closing: false,
+        };
+        historyMap.set(terminalName, entry);
+    } else {
+        // Keep paths current — stacks can be moved/renamed at the disk level.
+        entry.stackPath = stackPath;
+        entry.serviceName = serviceName;
+    }
+    return entry;
+}
+
+function startFollower(terminalName: string, containerName: string) {
+    const entry = historyMap.get(terminalName);
+    if (!entry || entry.closing || entry.follower) {
+        return;
+    }
+
+    const proc = spawn("docker", [ "logs", "-f", "--tail", String(HISTORY_LIMIT), containerName ], {
+        stdio: [ "ignore", "pipe", "pipe" ],
+    });
+    entry.follower = proc;
+
+    const onChunk = (data: Buffer) => {
+        entry.buffer.pushItem(data.toString("utf-8"));
+    };
+    proc.stdout?.on("data", onChunk);
+    proc.stderr?.on("data", onChunk);
+
+    proc.on("exit", () => {
+        if (entry.follower === proc) {
+            entry.follower = null;
+        }
+        if (entry.closing) {
+            return;
+        }
+        // Container restarted (or was paused). Try again shortly; if the
+        // container is gone for good the frontend will issue a
+        // minecraftClearHistory which sets `closing` and stops us.
+        entry.respawnTimer = setTimeout(() => {
+            entry.respawnTimer = null;
+            respawnFollower(terminalName).catch(e => {
+                log.warn("MinecraftHistory", "Respawn failed for " + terminalName + ": " + e);
+            });
+        }, RESPAWN_DELAY_MS);
+    });
+
+    proc.on("error", (err) => {
+        log.warn("MinecraftHistory", "Follower error for " + terminalName + ": " + err.message);
+    });
+}
+
+async function respawnFollower(terminalName: string) {
+    const entry = historyMap.get(terminalName);
+    if (!entry || entry.closing || entry.follower) {
+        return;
+    }
+    const containerName = await findContainerName(entry.stackPath, entry.serviceName);
+    if (!containerName) {
+        // Container not back yet — try again until the stack is explicitly
+        // stopped (which clears the entry) or it returns.
+        entry.respawnTimer = setTimeout(() => {
+            entry.respawnTimer = null;
+            respawnFollower(terminalName).catch(() => {});
+        }, RESPAWN_DELAY_MS);
+        return;
+    }
+    startFollower(terminalName, containerName);
+}
+
+function stopFollower(terminalName: string) {
+    const entry = historyMap.get(terminalName);
+    if (!entry) {
+        return;
+    }
+    entry.closing = true;
+    if (entry.respawnTimer) {
+        clearTimeout(entry.respawnTimer);
+        entry.respawnTimer = null;
+    }
+    if (entry.follower) {
+        try {
+            entry.follower.kill("SIGTERM");
+        } catch (_) { /* ignore */ }
+        entry.follower = null;
+    }
+    historyMap.delete(terminalName);
+}
 
 function getMinecraftAttachTerminalName(endpoint: string, stackName: string, serviceName: string): string {
     return `minecraft-attach-${endpoint}-${stackName}-${serviceName}`;
@@ -185,17 +305,30 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                 const terminalName = getMinecraftAttachTerminalName(socket.endpoint, stackName, serviceName);
 
                 let terminal = Terminal.getTerminal(terminalName);
+                let resolvedContainer: string | null = null;
 
                 if (!terminal) {
-                    const containerName = await findContainerName(stack.path, serviceName);
+                    resolvedContainer = await findContainerName(stack.path, serviceName);
 
-                    if (!containerName) {
+                    if (!resolvedContainer) {
                         throw new ValidationError("Container not found or not running");
                     }
 
-                    terminal = new InteractiveTerminal(server, terminalName, "docker", [ "attach", containerName ], stack.path);
+                    terminal = new InteractiveTerminal(server, terminalName, "docker", [ "attach", resolvedContainer ], stack.path);
                     terminal.rows = TERMINAL_ROWS;
                     terminal.enableKeepAlive = true;
+                }
+
+                // Make sure the per-stack log follower is running. It outlives
+                // the docker-attach PTY so the buffer survives container
+                // restarts; the next minecraftRequestHistory replays it.
+                const history = getHistoryEntry(terminalName, stack.path, serviceName);
+                history.closing = false;
+                if (!history.follower) {
+                    const followerContainer = resolvedContainer ?? await findContainerName(stack.path, serviceName);
+                    if (followerContainer) {
+                        startFollower(terminalName, followerContainer);
+                    }
                 }
 
                 terminal.join(socket);
@@ -203,6 +336,37 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
 
                 callbackResult({ ok: true,
                     terminalName }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftRequestHistory", async (terminalName: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof terminalName !== "string") {
+                    throw new ValidationError("Terminal name must be a string");
+                }
+                const entry = historyMap.get(terminalName);
+                const data = entry && entry.buffer.length > 0 ? entry.buffer.join("") : "";
+                if (data) {
+                    socket.emitAgent("terminalWrite", terminalName, data);
+                }
+                callbackResult({ ok: true,
+                    length: data.length }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftClearHistory", async (terminalName: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof terminalName !== "string") {
+                    throw new ValidationError("Terminal name must be a string");
+                }
+                stopFollower(terminalName);
+                callbackResult({ ok: true }, callback);
             } catch (e) {
                 callbackError(e, callback);
             }

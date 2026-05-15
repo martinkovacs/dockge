@@ -11,7 +11,7 @@
             <!-- JVM Limits -->
             <div class="mc-limit-card">
                 <div class="mc-limit-card-title">
-                    <font-awesome-icon icon="cube" class="me-2 text-primary" />
+                    <font-awesome-icon icon="coffee" class="me-2 text-primary" />
                     JVM Limits
                 </div>
                 <div class="mc-limit-row-grid">
@@ -43,7 +43,7 @@
             <!-- Docker Limits -->
             <div class="mc-limit-card">
                 <div class="mc-limit-card-title">
-                    <font-awesome-icon icon="microchip" class="me-2 text-primary" />
+                    <font-awesome-icon icon="cube" class="me-2 text-primary" />
                     Docker Limits
                 </div>
                 <div class="mc-limit-row-grid">
@@ -242,13 +242,9 @@ export default {
     gap: 8px;
 }
 
-// Highlight CPU and Memory cards inside Docker Limits so the two
-// most-relevant levers stand out from the surrounding container.
+// CPU / Memory titles inside Docker Limits get the primary accent
+// colour so the two most-relevant levers are visually grouped.
 .mc-limit-subsection--accent {
-    background: rgba(116, 194, 255, 0.06);
-    border-left: 3px solid $primary;
-    border-radius: 6px;
-    padding: 10px 12px;
     gap: 8px;
 
     .mc-limit-subsection-title {

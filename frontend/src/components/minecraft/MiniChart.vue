@@ -43,8 +43,6 @@ function niceCeil(value) {
         nice = 1;
     } else if (m <= 2) {
         nice = 2;
-    } else if (m <= 2.5) {
-        nice = 2.5;
     } else if (m <= 5) {
         nice = 5;
     } else {
@@ -59,16 +57,32 @@ function ceilToStep(value, step) {
 }
 
 // Y-axis ceiling for axes that can grow above their nominal max (currently
-// just CPU%). Steps in 25 up to 500, 50 up to 1000, 100 beyond — keeps
+// just CPU%). Steps in 20 up to 500, 50 up to 1000, 100 beyond — keeps
 // small overshoots (e.g. 101%) from doubling the axis to 200.
 function growStepCeil(value) {
     if (value <= 500) {
-        return ceilToStep(value, 25);
+        return ceilToStep(value, 20);
     }
     if (value <= 1000) {
         return ceilToStep(value, 50);
     }
     return ceilToStep(value, 100);
+}
+
+// For the "auto-bytes" unit: pick the right unit scale for a peak value
+// expressed in KB/s. Returns { divisor, suffix } — divide raw KB/s by
+// `divisor` to display in `suffix`.
+function pickByteScale(peakKb) {
+    if (peakKb >= 1024 * 1024) {
+        return { divisor: 1024 * 1024,
+            suffix: "GB/s" };
+    }
+    if (peakKb >= 1024) {
+        return { divisor: 1024,
+            suffix: "MB/s" };
+    }
+    return { divisor: 1,
+        suffix: "KB/s" };
 }
 
 export default {
@@ -110,6 +124,20 @@ export default {
             return this.datasets.some(ds => ds.data && ds.data.length > 0);
         },
 
+        // Resolved display scale: { divisor, suffix } for "auto-bytes",
+        // or { divisor: 1, suffix: this.unit } for plain units.
+        scale() {
+            if (this.unit === "auto-bytes") {
+                const peak = Math.max(
+                    0,
+                    ...this.datasets.flatMap(ds => ds.data || []),
+                );
+                return pickByteScale(peak);
+            }
+            return { divisor: 1,
+                suffix: this.unit };
+        },
+
         currentValue() {
             if (!this.datasets.length) {
                 return "—";
@@ -121,12 +149,13 @@ export default {
             if (vals.length === 0) {
                 return "—";
             }
+            const { divisor, suffix } = this.scale;
             if (this.datasets.length === 1) {
-                return vals[0].toFixed(1) + " " + this.unit;
+                return (vals[0] / divisor).toFixed(1) + " " + suffix;
             }
             return this.datasets.map((ds, i) => {
                 const v = vals[i] ?? 0;
-                return `${ds.label}: ${v.toFixed(1)} ${this.unit}`;
+                return `${ds.label}: ${(v / divisor).toFixed(1)} ${suffix}`;
             }).join("  ");
         },
 
@@ -185,7 +214,7 @@ export default {
                 yMax = niceCeil(rawMax);
             }
             const stepSize = yMax / 2;
-            const unit = this.unit;
+            const { divisor, suffix } = this.scale;
 
             return {
                 responsive: true,
@@ -217,9 +246,9 @@ export default {
                             color: "#888",
                             padding: 2,
                             callback(value) {
-                                const n = Number(value);
+                                const n = Number(value) / divisor;
                                 const formatted = Number.isInteger(n) ? n : n.toFixed(1);
-                                return `${formatted}${unit}`;
+                                return `${formatted}${suffix}`;
                             },
                         },
                     },

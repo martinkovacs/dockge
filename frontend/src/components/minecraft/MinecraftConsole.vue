@@ -92,7 +92,7 @@
                 <MiniChart
                     label="Network"
                     :datasets="netDatasets"
-                    unit="KB/s"
+                    unit="auto-bytes"
                 />
             </div>
         </div>
@@ -392,6 +392,11 @@ export default {
                 this.attach();
                 this.startUptimePolling();
             } else {
+                if (this.terminalName) {
+                    // Tell the backend to drop the follower + history buffer
+                    // for this stack — fresh start next time the user runs it.
+                    this.$root.emitAgent(this.endpoint, "minecraftClearHistory", this.terminalName, () => {});
+                }
                 this.terminalName = "";
                 this.attaching = false;
                 this.stopUptimePolling();
@@ -454,6 +459,15 @@ export default {
                 this.attaching = false;
                 if (res.ok) {
                     this.terminalName = res.terminalName;
+                    // Wait for the <Terminal> child to mount and bind itself
+                    // into terminalMap before the server replays history.
+                    this.$nextTick(() => {
+                        const name = this.terminalName;
+                        if (!name) {
+                            return;
+                        }
+                        this.$root.emitAgent(this.endpoint, "minecraftRequestHistory", name, () => {});
+                    });
                 } else {
                     this.$root.toastError(res.msg || "Failed to connect to server console");
                 }

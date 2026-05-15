@@ -1,183 +1,6 @@
 <template>
-    <div
-        class="mc-files"
-        @click="closeContextMenu"
-        @contextmenu.prevent="onBgContextMenu($event)"
-        @dragenter.prevent="onDragEnter"
-        @dragleave.prevent="onDragLeave"
-        @dragover.prevent
-        @drop.prevent="handleDrop"
-    >
-        <!-- Toolbar -->
-        <div class="mc-files-toolbar d-flex align-items-center gap-2 mb-2">
-            <!-- Breadcrumb -->
-            <nav class="flex-grow-1">
-                <ol class="breadcrumb mb-0">
-                    <li class="breadcrumb-item">
-                        <a href="#" @click.prevent="navigate('')">{{ stackName }}</a>
-                    </li>
-                    <li
-                        v-for="(part, i) in breadcrumbParts"
-                        :key="i"
-                        class="breadcrumb-item"
-                    >
-                        <a v-if="i < breadcrumbParts.length - 1" href="#" @click.prevent="navigate(breadcrumbPaths[i])">{{ part }}</a>
-                        <span v-else class="breadcrumb-current">{{ part }}</span>
-                    </li>
-                </ol>
-            </nav>
-
-            <button class="btn btn-sm btn-normal" :disabled="loading" title="Refresh" @click="reload">
-                <font-awesome-icon icon="rotate" />
-            </button>
-            <label class="btn btn-sm btn-primary mb-0">
-                <font-awesome-icon icon="upload" class="me-1" />
-                Upload
-                <input ref="fileInput" type="file" multiple class="d-none" @change="handleFileInput" />
-            </label>
-        </div>
-
-        <!-- Drop zone overlay -->
-        <div
-            class="mc-files-drop-zone"
-            :class="{ 'dragging': isDragging }"
-        >
-            <!-- File list -->
-            <div v-if="loading" class="text-center py-4 text-secondary">
-                <font-awesome-icon icon="spinner" spin /> Loading...
-            </div>
-            <div v-else-if="entries.length === 0 && !pendingNew" class="text-center py-4 text-secondary">
-                Empty directory
-                <div v-if="isDragging" class="mt-2 text-primary">Drop files here to upload</div>
-            </div>
-            <table v-else class="mc-files-table w-100">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th class="text-end">Size</th>
-                        <th class="text-end">Modified</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Pending new file/folder (inline create) -->
-                    <tr v-if="pendingNew" class="mc-file-row pending-new">
-                        <td>
-                            <font-awesome-icon
-                                :icon="pendingNew.isDir ? 'folder' : 'file'"
-                                class="me-2"
-                                :class="pendingNew.isDir ? 'text-warning' : 'text-secondary'"
-                            />
-                            <input
-                                ref="pendingNewInput"
-                                v-model="pendingNew.name"
-                                type="text"
-                                class="mc-inline-input"
-                                :placeholder="pendingNew.isDir ? 'New folder' : 'New file'"
-                                @keyup.enter="commitPendingNew"
-                                @keyup.escape="cancelPendingNew"
-                                @blur="commitPendingNew"
-                                @click.stop
-                            />
-                        </td>
-                        <td class="text-end text-secondary">—</td>
-                        <td class="text-end text-secondary">—</td>
-                    </tr>
-
-                    <tr
-                        v-for="(entry, idx) in entries"
-                        :key="entry.name"
-                        class="mc-file-row"
-                        :class="{ selected: isSelected(entry) }"
-                        @click.stop="handleRowClick(entry, idx, $event)"
-                        @dblclick.stop="handleRowDblClick(entry)"
-                        @contextmenu.prevent.stop="onRowContextMenu($event, entry, idx)"
-                    >
-                        <td class="mc-file-name">
-                            <template v-if="renamingEntry && renamingEntry.name === entry.name">
-                                <font-awesome-icon
-                                    :icon="entry.isDir ? 'folder' : 'file'"
-                                    class="me-2"
-                                    :class="entry.isDir ? 'text-warning' : 'text-secondary'"
-                                />
-                                <input
-                                    ref="renameInput"
-                                    v-model="renameValue"
-                                    type="text"
-                                    class="mc-inline-input"
-                                    @keyup.enter="commitRename"
-                                    @keyup.escape="cancelRename"
-                                    @blur="commitRename"
-                                    @click.stop
-                                />
-                            </template>
-                            <template v-else>
-                                <font-awesome-icon
-                                    :icon="entry.isDir ? 'folder' : 'file'"
-                                    class="me-2"
-                                    :class="entry.isDir ? 'text-warning' : 'text-secondary'"
-                                />
-                                <span>{{ entry.name }}</span>
-                            </template>
-                        </td>
-                        <td class="text-end text-secondary" style="white-space: nowrap">
-                            {{ entry.isDir ? '—' : formatSize(entry.size) }}
-                        </td>
-                        <td class="text-end text-secondary" style="white-space: nowrap">
-                            {{ formatDate(entry.mtime) }}
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-            <div v-if="isDragging" class="drop-hint">
-                <font-awesome-icon icon="upload" size="2x" />
-                <div>Drop files to upload</div>
-            </div>
-        </div>
-
-        <!-- Uploading indicator -->
-        <div v-if="uploading" class="mt-2 text-secondary">
-            <font-awesome-icon icon="spinner" spin class="me-1" />
-            Uploading...
-        </div>
-
-        <!-- Context menu -->
-        <ul
-            v-if="contextMenu.show"
-            class="mc-context-menu"
-            :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
-            @click.stop
-            @contextmenu.prevent.stop
-        >
-            <li v-if="ctxAction('open')" @click="runCtx('open')">
-                <font-awesome-icon icon="folder-open" class="me-2" />Open
-            </li>
-            <li v-if="ctxAction('edit')" @click="runCtx('edit')">
-                <font-awesome-icon icon="pen" class="me-2" />Edit
-            </li>
-            <li v-if="ctxAction('download')" @click="runCtx('download')">
-                <font-awesome-icon icon="download" class="me-2" />
-                Download{{ selectedEntries.length > 1 ? ` (${selectedEntries.length})` : '' }}
-            </li>
-            <li v-if="ctxAction('unzip')" @click="runCtx('unzip')">
-                <font-awesome-icon icon="file-zipper" class="me-2" />Unzip
-            </li>
-            <li v-if="ctxAction('rename')" @click="runCtx('rename')">
-                <font-awesome-icon icon="i-cursor" class="me-2" />Rename
-            </li>
-            <li v-if="ctxAction('delete')" class="danger" @click="runCtx('delete')">
-                <font-awesome-icon icon="trash" class="me-2" />
-                Delete{{ selectedEntries.length > 1 ? ` (${selectedEntries.length})` : '' }}
-            </li>
-            <li v-if="hasItemActions" class="separator"></li>
-            <li @click="runCtx('newFile')">
-                <font-awesome-icon icon="file" class="me-2" />New File
-            </li>
-            <li @click="runCtx('newFolder')">
-                <font-awesome-icon icon="folder-plus" class="me-2" />New Folder
-            </li>
-        </ul>
-
-        <!-- File editor modal -->
+    <div class="mc-files">
+        <!-- Inline file editor takes over the panel when a file is open -->
         <FileEditor
             v-if="editingFile"
             :file-path="joinPath(currentPath, editingFile.name)"
@@ -185,8 +8,189 @@
             :endpoint="endpoint"
             :stack-name="stackName"
             @close="editingFile = null"
-            @saved="reload"
+            @saved="onEditorSaved"
         />
+
+        <template v-else>
+            <div
+                class="mc-files-browser"
+                @click="closeContextMenu"
+                @contextmenu.prevent="onBgContextMenu($event)"
+                @dragenter.prevent="onDragEnter"
+                @dragleave.prevent="onDragLeave"
+                @dragover.prevent
+                @drop.prevent="handleDrop"
+            >
+                <!-- Toolbar -->
+                <div class="mc-files-toolbar d-flex align-items-center gap-2 mb-2">
+                    <!-- Breadcrumb -->
+                    <nav class="flex-grow-1">
+                        <ol class="breadcrumb mb-0">
+                            <li class="breadcrumb-item">
+                                <a href="#" @click.prevent="navigate('')">{{ stackName }}</a>
+                            </li>
+                            <li
+                                v-for="(part, i) in breadcrumbParts"
+                                :key="i"
+                                class="breadcrumb-item"
+                            >
+                                <a v-if="i < breadcrumbParts.length - 1" href="#" @click.prevent="navigate(breadcrumbPaths[i])">{{ part }}</a>
+                                <span v-else class="breadcrumb-current">{{ part }}</span>
+                            </li>
+                        </ol>
+                    </nav>
+
+                    <button class="btn btn-sm btn-normal" :disabled="loading" title="Refresh" @click="reload">
+                        <font-awesome-icon icon="rotate" />
+                    </button>
+                    <label class="btn btn-sm btn-primary mb-0">
+                        <font-awesome-icon icon="upload" class="me-1" />
+                        Upload
+                        <input ref="fileInput" type="file" multiple class="d-none" @change="handleFileInput" />
+                    </label>
+                </div>
+
+                <!-- Drop zone overlay -->
+                <div
+                    class="mc-files-drop-zone"
+                    :class="{ 'dragging': isDragging }"
+                >
+                    <!-- File list -->
+                    <div v-if="loading" class="text-center py-4 text-secondary">
+                        <font-awesome-icon icon="spinner" spin /> Loading...
+                    </div>
+                    <div v-else-if="entries.length === 0 && !pendingNew" class="text-center py-4 text-secondary">
+                        Empty directory
+                        <div v-if="isDragging" class="mt-2 text-primary">Drop files here to upload</div>
+                    </div>
+                    <table v-else class="mc-files-table w-100">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="text-end">Size</th>
+                                <th class="text-end">Modified</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Pending new file/folder (inline create) -->
+                            <tr v-if="pendingNew" class="mc-file-row pending-new">
+                                <td>
+                                    <font-awesome-icon
+                                        :icon="pendingNew.isDir ? 'folder' : 'file'"
+                                        class="me-2"
+                                        :class="pendingNew.isDir ? 'text-warning' : 'text-secondary'"
+                                    />
+                                    <input
+                                        ref="pendingNewInput"
+                                        v-model="pendingNew.name"
+                                        type="text"
+                                        class="mc-inline-input"
+                                        :placeholder="pendingNew.isDir ? 'New folder' : 'New file'"
+                                        @keyup.enter="commitPendingNew"
+                                        @keyup.escape="cancelPendingNew"
+                                        @blur="commitPendingNew"
+                                        @click.stop
+                                    />
+                                </td>
+                                <td class="text-end text-secondary">—</td>
+                                <td class="text-end text-secondary">—</td>
+                            </tr>
+
+                            <tr
+                                v-for="(entry, idx) in entries"
+                                :key="entry.name"
+                                class="mc-file-row"
+                                :class="{ selected: isSelected(entry) }"
+                                @click.stop="handleRowClick(entry, idx, $event)"
+                                @dblclick.stop="handleRowDblClick(entry)"
+                                @contextmenu.prevent.stop="onRowContextMenu($event, entry, idx)"
+                            >
+                                <td class="mc-file-name">
+                                    <template v-if="renamingEntry && renamingEntry.name === entry.name">
+                                        <font-awesome-icon
+                                            :icon="entry.isDir ? 'folder' : 'file'"
+                                            class="me-2"
+                                            :class="entry.isDir ? 'text-warning' : 'text-secondary'"
+                                        />
+                                        <input
+                                            ref="renameInput"
+                                            v-model="renameValue"
+                                            type="text"
+                                            class="mc-inline-input"
+                                            @keyup.enter="commitRename"
+                                            @keyup.escape="cancelRename"
+                                            @blur="commitRename"
+                                            @click.stop
+                                        />
+                                    </template>
+                                    <template v-else>
+                                        <font-awesome-icon
+                                            :icon="entry.isDir ? 'folder' : 'file'"
+                                            class="me-2"
+                                            :class="entry.isDir ? 'text-warning' : 'text-secondary'"
+                                        />
+                                        <span>{{ entry.name }}</span>
+                                    </template>
+                                </td>
+                                <td class="text-end text-secondary" style="white-space: nowrap">
+                                    {{ entry.isDir ? '—' : formatSize(entry.size) }}
+                                </td>
+                                <td class="text-end text-secondary" style="white-space: nowrap">
+                                    {{ formatDate(entry.mtime) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="isDragging" class="drop-hint">
+                        <font-awesome-icon icon="upload" size="2x" />
+                        <div>Drop files to upload</div>
+                    </div>
+                </div>
+
+                <!-- Uploading indicator -->
+                <div v-if="uploading" class="mt-2 text-secondary">
+                    <font-awesome-icon icon="spinner" spin class="me-1" />
+                    Uploading...
+                </div>
+
+                <!-- Context menu -->
+                <ul
+                    v-if="contextMenu.show"
+                    class="mc-context-menu"
+                    :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
+                    @click.stop
+                    @contextmenu.prevent.stop
+                >
+                    <li v-if="ctxAction('open')" @click="runCtx('open')">
+                        <font-awesome-icon icon="folder-open" class="me-2" />Open
+                    </li>
+                    <li v-if="ctxAction('edit')" @click="runCtx('edit')">
+                        <font-awesome-icon icon="pen" class="me-2" />Edit
+                    </li>
+                    <li v-if="ctxAction('download')" @click="runCtx('download')">
+                        <font-awesome-icon icon="download" class="me-2" />
+                        Download{{ selectedEntries.length > 1 ? ` (${selectedEntries.length})` : '' }}
+                    </li>
+                    <li v-if="ctxAction('unzip')" @click="runCtx('unzip')">
+                        <font-awesome-icon icon="file-zipper" class="me-2" />Unzip
+                    </li>
+                    <li v-if="ctxAction('rename')" @click="runCtx('rename')">
+                        <font-awesome-icon icon="i-cursor" class="me-2" />Rename
+                    </li>
+                    <li v-if="ctxAction('delete')" class="danger" @click="runCtx('delete')">
+                        <font-awesome-icon icon="trash" class="me-2" />
+                        Delete{{ selectedEntries.length > 1 ? ` (${selectedEntries.length})` : '' }}
+                    </li>
+                    <li v-if="hasItemActions" class="separator"></li>
+                    <li @click="runCtx('newFile')">
+                        <font-awesome-icon icon="file" class="me-2" />New File
+                    </li>
+                    <li @click="runCtx('newFolder')">
+                        <font-awesome-icon icon="folder-plus" class="me-2" />New Folder
+                    </li>
+                </ul>
+            </div>
+        </template>
     </div>
 </template>
 
@@ -363,6 +367,11 @@ export default {
         isEditable(filename) {
             const ext = filename.split(".").pop()?.toLowerCase() || "";
             return EDITABLE_EXTS.has(ext);
+        },
+
+        onEditorSaved() {
+            this.editingFile = null;
+            this.reload();
         },
 
         editFile(entry) {

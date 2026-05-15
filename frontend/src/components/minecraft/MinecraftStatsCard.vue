@@ -110,12 +110,13 @@ function parsePlayers(stdout) {
 }
 
 // "This server is running Paper version 1.21.4-..." — keep the
-// distribution + version, drop "(Implementing API version ...)".
+// distribution + version, drop build/branch suffixes like "-63-main@711c5de"
+// and "(Implementing API version ...)".
 function parseVersion(stdout) {
     for (const line of eachLine(stdout)) {
         const m = line.match(/running\s+(.+?)(?:\s*\(|$)/i);
         if (m) {
-            return m[1].trim();
+            return m[1].trim().split(/[-@]/)[0].trim();
         }
     }
     return null;
@@ -296,7 +297,7 @@ export default {
                     const msptRes = await this.rcon("mspt");
                     this.mspt = msptRes.ok ? parseMspt(msptRes.stdout) : null;
 
-                    const listRes = await this.rcon("list");
+                    const listRes = await this.rcon("minecraft:list");
                     this.players = listRes.ok ? parsePlayers(listRes.stdout) : null;
 
                     const versionRes = await this.rcon("version");
