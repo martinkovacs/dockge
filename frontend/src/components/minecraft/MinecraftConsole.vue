@@ -4,9 +4,9 @@
             <!-- Left: status pills + terminal + command input -->
             <div class="mc-terminal-col">
                 <div class="mc-status-pills">
-                    <span class="mc-pill mc-pill-status" :class="isRunning ? 'is-online' : 'is-offline'">
+                    <span class="mc-pill mc-pill-status" :class="rconAvailable ? 'is-online' : 'is-offline'">
                         <span class="mc-status-dot"></span>
-                        {{ isRunning ? "Online" : "Offline" }}
+                        {{ rconAvailable ? "Online" : "Offline" }}
                     </span>
                     <span class="mc-pill">
                         <span class="mc-pill-label">Address</span>
@@ -105,7 +105,8 @@ import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import { RUNNING } from "../../../../common/util-common";
 import { readResourceLimits, readJvmMemory } from "./mcCompose";
 
-const RCON_POLL_MS = 5000;
+const TICK_POLL_MS = 1000;
+const PLAYERS_POLL_MS = 5000;
 const HISTORY = 60;
 const CMD_HISTORY_LIMIT = 200;
 
@@ -246,19 +247,15 @@ function parsePlayers(stdout) {
     return null;
 }
 
-// `minecraft:version` reply (vanilla command, multi-line key=value list):
-//   Server version info:
-//     id = 26.1.2
-//     name = ...
-//     ...
+// `minecraft:version` reply (vanilla command, key=value list). The lines
+// often come back without newlines, just repeated `[HH:MM:SS INFO]:`
+// prefixes — so scan the whole stdout instead of splitting first.
 function parseVersion(stdout) {
-    for (const line of eachLine(stdout)) {
-        const m = line.match(/^id\s*=\s*(.+)$/i);
-        if (m) {
-            return m[1].trim();
-        }
+    if (!stdout) {
+        return null;
     }
-    return null;
+    const m = stdout.match(/\bid\s*=\s*([^\s[]+)/i);
+    return m ? m[1].trim() : null;
 }
 
 export default {
@@ -304,9 +301,16 @@ export default {
             msptHistory: Array(HISTORY).fill(0),
             prevNetRx: null,
             prevNetTx: null,
-            // RCON polling state (lifted up from the old StatsCard).
-            rconTimer: null,
-            rconInFlight: false,
+            // RCON polling state. We treat the connection as "online"
+            // based on whether the last tick poll succeeded — `status`
+            // (docker container running) goes up before the MC server is
+            // actually accepting connections.
+            tickTimer: null,
+            tickInFlight: false,
+            playersTimer: null,
+            playersInFlight: false,
+            versionFetched: false,
+            rconAvailable: false,
             tps: null,
             mspt: null,
             players: null,
@@ -502,6 +506,7 @@ export default {
                 this.stopRconPolling();
                 this.resetRconStats();
                 this.startedAt = "";
+                this.rconAvailable = false;
             }
         },
 
@@ -603,15 +608,22 @@ export default {
 
         startRconPolling() {
             this.stopRconPolling();
-            this.pollRcon();
-            this.rconTimer = setInterval(() => this.pollRcon(), RCON_POLL_MS);
+            this.pollTick();
+            this.tickTimer = setInterval(() => this.pollTick(), TICK_POLL_MS);
+            this.pollPlayers();
+            this.playersTimer = setInterval(() => this.pollPlayers(), PLAYERS_POLL_MS);
         },
 
         stopRconPolling() {
-            if (this.rconTimer) {
-                clearInterval(this.rconTimer);
-                this.rconTimer = null;
+            if (this.tickTimer) {
+                clearInterval(this.tickTimer);
+                this.tickTimer = null;
             }
+            if (this.playersTimer) {
+                clearInterval(this.playersTimer);
+                this.playersTimer = null;
+            }
+            this.versionFetched = false;
         },
 
         resetRconStats() {
@@ -619,6 +631,7 @@ export default {
             this.mspt = null;
             this.players = null;
             this.version = null;
+            this.versionFetched = false;
             this.tpsHistory = Array(HISTORY).fill(0);
             this.msptHistory = Array(HISTORY).fill(0);
         },
@@ -631,43 +644,61 @@ export default {
             });
         },
 
-        pollRcon() {
-            if (this.rconInFlight || !this.isRunning) {
+        async pollTick() {
+            if (this.tickInFlight || !this.isRunning) {
                 return;
             }
-            this.rconInFlight = true;
-            // Sequential by design — the backend shells out to docker exec
-            // each call; four parallel calls just thrash dockerd.
-            (async () => {
-                try {
-                    const tpsRes = await this.rcon("tps");
-                    if (!tpsRes.ok) {
-                        // RCON not reachable — bail until next tick.
-                        return;
-                    }
-                    const tps = parseTps(tpsRes.stdout);
-                    this.tps = tps;
-                    this.tpsHistory = [ ...this.tpsHistory.slice(1), tps == null ? 0 : tps ];
+            this.tickInFlight = true;
+            try {
+                const tpsRes = await this.rcon("tps");
+                if (!tpsRes.ok) {
+                    // RCON not reachable — server may still be starting up.
+                    this.rconAvailable = false;
+                    return;
+                }
+                this.rconAvailable = true;
+                const tps = parseTps(tpsRes.stdout);
+                this.tps = tps;
+                this.tpsHistory = [ ...this.tpsHistory.slice(1), tps == null ? 0 : tps ];
 
-                    const msptRes = await this.rcon("mspt");
-                    const mspt = msptRes.ok ? parseMspt(msptRes.stdout) : null;
-                    this.mspt = mspt;
-                    this.msptHistory = [ ...this.msptHistory.slice(1), mspt == null ? 0 : mspt ];
+                const msptRes = await this.rcon("mspt");
+                const mspt = msptRes.ok ? parseMspt(msptRes.stdout) : null;
+                this.mspt = mspt;
+                this.msptHistory = [ ...this.msptHistory.slice(1), mspt == null ? 0 : mspt ];
 
-                    const listRes = await this.rcon("minecraft:list");
-                    this.players = listRes.ok ? parsePlayers(listRes.stdout) : null;
-
+                // Version is static for the lifetime of the container —
+                // grab it once after RCON first answers, then leave it.
+                if (!this.versionFetched) {
+                    this.versionFetched = true;
                     const versionRes = await this.rcon("minecraft:version");
                     if (versionRes.ok) {
                         const v = parseVersion(versionRes.stdout);
                         if (v) {
                             this.version = v;
+                        } else {
+                            // Let the next tick retry until we get a parse hit.
+                            this.versionFetched = false;
                         }
+                    } else {
+                        this.versionFetched = false;
                     }
-                } finally {
-                    this.rconInFlight = false;
                 }
-            })();
+            } finally {
+                this.tickInFlight = false;
+            }
+        },
+
+        async pollPlayers() {
+            if (this.playersInFlight || !this.isRunning) {
+                return;
+            }
+            this.playersInFlight = true;
+            try {
+                const listRes = await this.rcon("minecraft:list");
+                this.players = listRes.ok ? parsePlayers(listRes.stdout) : null;
+            } finally {
+                this.playersInFlight = false;
+            }
         },
 
         loadCmdHistory() {

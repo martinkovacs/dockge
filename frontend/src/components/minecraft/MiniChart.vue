@@ -229,11 +229,20 @@ export default {
                     data: [ ...ds.data ],
                     borderColor: ds.color,
                     backgroundColor: ds.color + "33",
-                    fill: !this.axes.length,
+                    fill: true,
                     tension: 0.4,
                     pointRadius: 0,
+                    pointHoverRadius: 0,
+                    pointHitRadius: 0,
                     borderWidth: 2,
                     yAxisID: ds.yAxisID || "y",
+                    // Let the stroke render a couple of pixels above the
+                    // data area so a line that sits at the very top of
+                    // the axis (e.g. TPS = 20) isn't sliced in half.
+                    clip: { top: 4,
+                        bottom: false,
+                        left: false,
+                        right: false },
                 })),
             };
         },
