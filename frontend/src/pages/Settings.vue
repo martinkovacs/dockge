@@ -77,8 +77,8 @@ export default {
                 general: {
                     title: this.$t("general"),
                 },
-                stacks: {
-                    title: "Stacks",
+                minecraftView: {
+                    title: this.$t("minecraftView"),
                 },
                 appearance: {
                     title: this.$t("Appearance"),

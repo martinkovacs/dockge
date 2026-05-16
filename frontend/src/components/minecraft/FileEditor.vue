@@ -30,6 +30,7 @@
                 wrap="true"
                 dark="true"
                 tab="true"
+                @ready="onEditorReady"
             />
         </div>
     </div>
@@ -105,6 +106,20 @@ export default {
     },
 
     methods: {
+        onEditorReady({ view }) {
+            // CodeMirror measures the gutter at mount time, before the
+            // flex parent has been laid out and before web fonts have
+            // loaded — the line numbers end up with the default
+            // line-height and only snap into place once the editor
+            // receives focus. Force a remeasure after layout + fonts
+            // settle so the gutter is correct on first paint.
+            const remeasure = () => view.requestMeasure();
+            requestAnimationFrame(remeasure);
+            if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(remeasure).catch(() => {});
+            }
+        },
+
         save() {
             this.saving = true;
             const originalName = this.filePath.split("/").pop();
@@ -186,5 +201,12 @@ export default {
     overflow: auto;
     border: 1px solid $dark-border-color;
     border-radius: 6px;
+
+    // Pin the line-height on both sides of the gutter so a font-loading
+    // race can never desync the line numbers from the content rows.
+    :deep(.cm-content),
+    :deep(.cm-gutterElement) {
+        line-height: 1.5;
+    }
 }
 </style>

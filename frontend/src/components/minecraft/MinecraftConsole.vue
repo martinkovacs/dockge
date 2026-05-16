@@ -1,9 +1,31 @@
 <template>
     <div class="mc-console">
-        <!-- Main content: terminal left, info+charts right -->
         <div class="mc-main-row">
-            <!-- Left: terminal + command input -->
+            <!-- Left: status pills + terminal + command input -->
             <div class="mc-terminal-col">
+                <div class="mc-status-pills">
+                    <span class="mc-pill mc-pill-status" :class="isRunning ? 'is-online' : 'is-offline'">
+                        <span class="mc-status-dot"></span>
+                        {{ isRunning ? "Online" : "Offline" }}
+                    </span>
+                    <span class="mc-pill">
+                        <span class="mc-pill-label">Address</span>
+                        <span class="mc-pill-value mc-pill-mono">{{ serverAddress }}</span>
+                    </span>
+                    <span class="mc-pill">
+                        <span class="mc-pill-label">Uptime</span>
+                        <span class="mc-pill-value">{{ uptimeText }}</span>
+                    </span>
+                    <span class="mc-pill">
+                        <span class="mc-pill-label">Players</span>
+                        <span class="mc-pill-value">{{ playersDisplay }}</span>
+                    </span>
+                    <span class="mc-pill">
+                        <span class="mc-pill-label">Version</span>
+                        <span class="mc-pill-value mc-pill-mono" :title="versionDisplay">{{ versionDisplay }}</span>
+                    </span>
+                </div>
+
                 <div class="mc-terminal-wrap">
                     <Terminal
                         v-if="terminalName"
@@ -21,7 +43,7 @@
                         <span v-else>Server is offline</span>
                     </div>
                 </div>
-                <!-- Command input -->
+
                 <div class="mc-cmd-input mt-2">
                     <div class="input-group">
                         <span class="input-group-text mc-cmd-prompt">&gt;</span>
@@ -31,6 +53,9 @@
                             class="form-control mc-cmd-field"
                             placeholder="Enter command..."
                             :disabled="!terminalName"
+                            @input="resetHistoryNav"
+                            @keydown.up.prevent="historyPrev"
+                            @keydown.down.prevent="historyNext"
                             @keyup.enter="sendCommand"
                         />
                         <button class="btn btn-primary" :disabled="!terminalName || !cmdInput" @click="sendCommand">
@@ -40,40 +65,12 @@
                 </div>
             </div>
 
-            <!-- Right: status, address, charts -->
+            <!-- Right: charts -->
             <div class="mc-charts-col">
-                <div class="mc-info-block">
-                    <div class="mc-info-col">
-                        <div class="mc-info-label">Address</div>
-                        <div class="mc-info-value address-val">{{ serverAddress }}</div>
-                        <div class="mc-info-label mt-2">Uptime</div>
-                        <div class="mc-info-value">{{ uptimeText }}</div>
-                    </div>
-                    <div v-if="limitSections.length" class="mc-info-col mc-info-col-limits">
-                        <div
-                            v-for="section in limitSections"
-                            :key="section.title"
-                            class="mc-limits-section"
-                        >
-                            <div class="mc-limits-section-title">{{ section.title }}</div>
-                            <div class="mc-limits-section-row">
-                                <div
-                                    v-for="pair in section.pairs"
-                                    :key="pair.label"
-                                    class="mc-limits-pair"
-                                >
-                                    <span class="mc-limits-section-label">{{ pair.label }}</span>
-                                    <span class="mc-limits-section-value">{{ pair.value }}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <MinecraftStatsCard
-                    :endpoint="endpoint"
-                    :stack-name="stackName"
-                    :service-name="serviceName"
-                    :status="status"
+                <MiniChart
+                    label="Tick Performance"
+                    :datasets="tickDatasets"
+                    :axes="tickAxes"
                 />
                 <MiniChart
                     label="CPU"
@@ -81,6 +78,7 @@
                     unit="%"
                     :max-y="100"
                     :allow-grow-above-max="true"
+                    :secondary-sub-value="cpuSubValue"
                 />
                 <MiniChart
                     label="Memory"
@@ -88,6 +86,7 @@
                     unit="%"
                     :max-y="100"
                     :sub-value="memSubValue"
+                    :secondary-sub-value="memSecondarySubValue"
                 />
                 <MiniChart
                     label="Network"
@@ -102,10 +101,13 @@
 <script>
 import Terminal from "../Terminal.vue";
 import MiniChart from "./MiniChart.vue";
-import MinecraftStatsCard from "./MinecraftStatsCard.vue";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import { RUNNING } from "../../../../common/util-common";
 import { readResourceLimits, readJvmMemory } from "./mcCompose";
+
+const RCON_POLL_MS = 5000;
+const HISTORY = 60;
+const CMD_HISTORY_LIMIT = 200;
 
 function formatUptime(startedAt) {
     if (!startedAt) {
@@ -133,8 +135,6 @@ function formatUptime(startedAt) {
     }
     return `${secs}s`;
 }
-
-const HISTORY = 60;
 
 function parsePercent(str) {
     if (!str) {
@@ -194,10 +194,76 @@ function parseNetIO(str) {
         tx: parseBytes(parts[1]) };
 }
 
+// Strip Minecraft color codes, log prefixes, and Paper's clock-face glyph.
+function cleanLine(line) {
+    return line
+        .replace(/§./g, "")
+        .replace(/^\[\d{1,2}:\d{2}:\d{2}\s*[A-Z]+\]:\s*/i, "")
+        .replace(/^[◴◷◶◵*]\s*/u, "")
+        .trim();
+}
+
+function eachLine(stdout) {
+    if (!stdout) {
+        return [];
+    }
+    return stdout.split(/\r?\n/).map(cleanLine).filter(l => l.length > 0);
+}
+
+// Paper/Purpur: "TPS from last 1m, 5m, 15m: 20.0, 20.0, 20.0"
+function parseTps(stdout) {
+    for (const line of eachLine(stdout)) {
+        const m = line.match(/TPS from[^:]*:\s*\*?(\d+(?:\.\d+)?)/i);
+        if (m) {
+            return parseFloat(m[1]);
+        }
+    }
+    return null;
+}
+
+// Paper: "Server tick times (avg/min/max) from last 5s, 10s, 1m:"
+//        "0.3/0.1/1.2, 0.4/0.1/3.8, 0.9/0.1/39.4"
+function parseMspt(stdout) {
+    for (const line of eachLine(stdout)) {
+        const m = line.match(/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)/);
+        if (m) {
+            return parseFloat(m[1]);
+        }
+    }
+    return null;
+}
+
+// "There are 2 of a max of 20 players online: foo, bar" or
+// "There are 2/20 players online: foo, bar".
+function parsePlayers(stdout) {
+    for (const line of eachLine(stdout)) {
+        const m = line.match(/There are (\d+)(?:\/| of a max of )(\d+)/i);
+        if (m) {
+            return { current: parseInt(m[1], 10),
+                max: parseInt(m[2], 10) };
+        }
+    }
+    return null;
+}
+
+// `minecraft:version` reply (vanilla command, multi-line key=value list):
+//   Server version info:
+//     id = 26.1.2
+//     name = ...
+//     ...
+function parseVersion(stdout) {
+    for (const line of eachLine(stdout)) {
+        const m = line.match(/^id\s*=\s*(.+)$/i);
+        if (m) {
+            return m[1].trim();
+        }
+    }
+    return null;
+}
+
 export default {
     components: { Terminal,
         MiniChart,
-        MinecraftStatsCard,
         FontAwesomeIcon },
 
     props: {
@@ -223,6 +289,9 @@ export default {
             attaching: false,
             reattachTimer: null,
             cmdInput: "",
+            cmdHistory: [],
+            cmdHistoryIndex: -1,
+            cmdDraft: "",
             startedAt: "",
             uptimeTick: 0,
             inspectTimer: null,
@@ -231,8 +300,17 @@ export default {
             memHistory: Array(HISTORY).fill(0),
             netRxHistory: Array(HISTORY).fill(0),
             netTxHistory: Array(HISTORY).fill(0),
+            tpsHistory: Array(HISTORY).fill(0),
+            msptHistory: Array(HISTORY).fill(0),
             prevNetRx: null,
             prevNetTx: null,
+            // RCON polling state (lifted up from the old StatsCard).
+            rconTimer: null,
+            rconInFlight: false,
+            tps: null,
+            mspt: null,
+            players: null,
+            version: null,
         };
     },
 
@@ -249,55 +327,11 @@ export default {
             return readJvmMemory(this.jsonConfig, this.serviceName);
         },
 
-        limitSections() {
-            const sections = [];
-            const jvm = [];
-            if (this.jvmMemory.initMemory) {
-                jvm.push({ label: "Xms",
-                    value: this.jvmMemory.initMemory });
-            }
-            if (this.jvmMemory.maxMemory) {
-                jvm.push({ label: "Xmx",
-                    value: this.jvmMemory.maxMemory });
-            }
-            if (jvm.length) {
-                sections.push({ title: "JVM",
-                    pairs: jvm });
-            }
-
-            const limits = [];
-            if (this.resourceLimits.cpuLimit) {
-                limits.push({ label: "CPU",
-                    value: this.resourceLimits.cpuLimit });
-            }
-            if (this.resourceLimits.memLimit) {
-                limits.push({ label: "Mem",
-                    value: this.resourceLimits.memLimit });
-            }
-            if (limits.length) {
-                sections.push({ title: "Limits",
-                    pairs: limits });
-            }
-
-            const reservations = [];
-            if (this.resourceLimits.cpuReservation) {
-                reservations.push({ label: "CPU",
-                    value: this.resourceLimits.cpuReservation });
-            }
-            if (this.resourceLimits.memReservation) {
-                reservations.push({ label: "Mem",
-                    value: this.resourceLimits.memReservation });
-            }
-            if (reservations.length) {
-                sections.push({ title: "Reservations",
-                    pairs: reservations });
-            }
-
-            return sections;
+        cmdHistoryKey() {
+            return `mc-cmd-history-${this.stackName}-${this.serviceName}`;
         },
 
         uptimeText() {
-            // Re-evaluated on uptimeTick changes so the ticker re-renders.
             // eslint-disable-next-line no-unused-expressions
             this.uptimeTick;
             if (!this.isRunning) {
@@ -318,28 +352,22 @@ export default {
             return `${window.location.hostname}:${hostPort}`;
         },
 
+        playersDisplay() {
+            if (!this.players) {
+                return "—";
+            }
+            return `${this.players.current} / ${this.players.max}`;
+        },
+
+        versionDisplay() {
+            return this.version || "—";
+        },
+
         mcStats() {
             return Object.values(this.dockerStats).find(s => {
                 const name = s.Name || "";
                 return name.toLowerCase().includes(this.stackName.toLowerCase());
             }) || null;
-        },
-
-        cpuText() {
-            return this.mcStats?.CPUPerc || "—";
-        },
-
-        memText() {
-            if (!this.mcStats?.MemUsage) {
-                return "—";
-            }
-            const parts = this.mcStats.MemUsage.split(" / ");
-            const pct = parseMemPercent(this.mcStats.MemUsage).toFixed(2);
-            return `${pct}% (${parts[0]} / ${parts[1]})`;
-        },
-
-        diskText() {
-            return this.mcStats?.BlockIO || "—";
         },
 
         cpuDatasets() {
@@ -364,7 +392,51 @@ export default {
             }
             const used = parseBytes(parts[0]) / 1048576;
             const total = parseBytes(parts[1]) / 1048576;
-            return `${used.toFixed(2)} MiB / ${total.toFixed(2)} MiB`;
+            return `${used.toFixed(0)} / ${total.toFixed(0)} MiB`;
+        },
+
+        memSecondarySubValue() {
+            const parts = [];
+            const { initMemory, maxMemory } = this.jvmMemory;
+            if (initMemory || maxMemory) {
+                const jvm = [];
+                if (initMemory) {
+                    jvm.push(`Xms ${initMemory}`);
+                }
+                if (maxMemory) {
+                    jvm.push(`Xmx ${maxMemory}`);
+                }
+                parts.push(jvm.join(" "));
+            }
+            const lim = this.resourceLimits.memLimit;
+            const res = this.resourceLimits.memReservation;
+            if (lim || res) {
+                const lr = [];
+                if (lim) {
+                    lr.push(`lim ${lim}`);
+                }
+                if (res) {
+                    lr.push(`res ${res}`);
+                }
+                parts.push(lr.join(" / "));
+            }
+            return parts.join("  •  ");
+        },
+
+        cpuSubValue() {
+            const lim = this.resourceLimits.cpuLimit;
+            const res = this.resourceLimits.cpuReservation;
+            if (!lim && !res) {
+                return "";
+            }
+            const lr = [];
+            if (lim) {
+                lr.push(`lim ${lim}`);
+            }
+            if (res) {
+                lr.push(`res ${res}`);
+            }
+            return lr.join(" / ");
         },
 
         netDatasets() {
@@ -375,6 +447,34 @@ export default {
                 { label: "Out",
                     data: this.netTxHistory,
                     color: "#f8a306" },
+            ];
+        },
+
+        tickDatasets() {
+            return [
+                { label: "MSPT",
+                    data: this.msptHistory,
+                    color: "#f8a306",
+                    yAxisID: "mspt" },
+                { label: "TPS",
+                    data: this.tpsHistory,
+                    color: "#74c2ff",
+                    yAxisID: "tps" },
+            ];
+        },
+
+        tickAxes() {
+            return [
+                { id: "mspt",
+                    position: "left",
+                    maxY: 50,
+                    allowGrowAboveMax: true,
+                    unit: "ms" },
+                { id: "tps",
+                    position: "right",
+                    maxY: 20,
+                    allowGrowAboveMax: false,
+                    unit: "" },
             ];
         },
     },
@@ -391,25 +491,20 @@ export default {
             if (val) {
                 this.attach();
                 this.startUptimePolling();
+                this.startRconPolling();
             } else {
                 if (this.terminalName) {
-                    // Tell the backend to drop the follower + history buffer
-                    // for this stack — fresh start next time the user runs it.
                     this.$root.emitAgent(this.endpoint, "minecraftClearHistory", this.terminalName, () => {});
                 }
                 this.terminalName = "";
                 this.attaching = false;
                 this.stopUptimePolling();
+                this.stopRconPolling();
+                this.resetRconStats();
                 this.startedAt = "";
             }
         },
 
-        // When the docker attach pty exits (typical case: container restart
-        // killing the attached process), the backend emits `terminalExit` and
-        // the entry is removed from its terminalMap. Clear our local
-        // reference so a fresh attach can run; if the server is still
-        // marked as running, reconnect after a short delay (the new
-        // container needs a moment to come up).
         "$root.lastTerminalExit": {
             deep: true,
             handler(val) {
@@ -432,9 +527,11 @@ export default {
     },
 
     mounted() {
+        this.loadCmdHistory();
         if (this.isRunning) {
             this.attach();
             this.startUptimePolling();
+            this.startRconPolling();
         }
     },
 
@@ -444,6 +541,7 @@ export default {
             this.reattachTimer = null;
         }
         this.stopUptimePolling();
+        this.stopRconPolling();
         if (this.terminalName) {
             this.$root.emitAgent(this.endpoint, "leaveCombinedTerminal", this.stackName, () => {});
         }
@@ -459,8 +557,6 @@ export default {
                 this.attaching = false;
                 if (res.ok) {
                     this.terminalName = res.terminalName;
-                    // Wait for the <Terminal> child to mount and bind itself
-                    // into terminalMap before the server replays history.
                     this.$nextTick(() => {
                         const name = this.terminalName;
                         if (!name) {
@@ -477,9 +573,6 @@ export default {
         startUptimePolling() {
             this.stopUptimePolling();
             this.fetchUptime();
-            // Re-fetch the container's StartedAt every 30s so we catch
-            // restarts. The displayed value advances every second via
-            // uptimeTimer below.
             this.inspectTimer = setInterval(() => this.fetchUptime(), 30000);
             this.uptimeTimer = setInterval(() => {
                 this.uptimeTick = (this.uptimeTick + 1) % 1_000_000;
@@ -508,17 +601,152 @@ export default {
             });
         },
 
+        startRconPolling() {
+            this.stopRconPolling();
+            this.pollRcon();
+            this.rconTimer = setInterval(() => this.pollRcon(), RCON_POLL_MS);
+        },
+
+        stopRconPolling() {
+            if (this.rconTimer) {
+                clearInterval(this.rconTimer);
+                this.rconTimer = null;
+            }
+        },
+
+        resetRconStats() {
+            this.tps = null;
+            this.mspt = null;
+            this.players = null;
+            this.version = null;
+            this.tpsHistory = Array(HISTORY).fill(0);
+            this.msptHistory = Array(HISTORY).fill(0);
+        },
+
+        rcon(command) {
+            return new Promise((resolve) => {
+                this.$root.emitAgent(this.endpoint, "minecraftRconExec", this.stackName, this.serviceName, command, (res) => {
+                    resolve(res || { ok: false });
+                });
+            });
+        },
+
+        pollRcon() {
+            if (this.rconInFlight || !this.isRunning) {
+                return;
+            }
+            this.rconInFlight = true;
+            // Sequential by design — the backend shells out to docker exec
+            // each call; four parallel calls just thrash dockerd.
+            (async () => {
+                try {
+                    const tpsRes = await this.rcon("tps");
+                    if (!tpsRes.ok) {
+                        // RCON not reachable — bail until next tick.
+                        return;
+                    }
+                    const tps = parseTps(tpsRes.stdout);
+                    this.tps = tps;
+                    this.tpsHistory = [ ...this.tpsHistory.slice(1), tps == null ? 0 : tps ];
+
+                    const msptRes = await this.rcon("mspt");
+                    const mspt = msptRes.ok ? parseMspt(msptRes.stdout) : null;
+                    this.mspt = mspt;
+                    this.msptHistory = [ ...this.msptHistory.slice(1), mspt == null ? 0 : mspt ];
+
+                    const listRes = await this.rcon("minecraft:list");
+                    this.players = listRes.ok ? parsePlayers(listRes.stdout) : null;
+
+                    const versionRes = await this.rcon("minecraft:version");
+                    if (versionRes.ok) {
+                        const v = parseVersion(versionRes.stdout);
+                        if (v) {
+                            this.version = v;
+                        }
+                    }
+                } finally {
+                    this.rconInFlight = false;
+                }
+            })();
+        },
+
+        loadCmdHistory() {
+            try {
+                const raw = localStorage.getItem(this.cmdHistoryKey);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) {
+                        this.cmdHistory = parsed.slice(-CMD_HISTORY_LIMIT);
+                    }
+                }
+            } catch (e) {
+                // ignore — corrupt storage just resets history.
+            }
+        },
+
+        saveCmdHistory() {
+            try {
+                localStorage.setItem(this.cmdHistoryKey, JSON.stringify(this.cmdHistory));
+            } catch (e) {
+                // localStorage full or disabled — non-fatal.
+            }
+        },
+
         sendCommand() {
             if (!this.cmdInput || !this.terminalName) {
                 return;
             }
-            const cmd = this.cmdInput + "\n";
+            const raw = this.cmdInput;
+            const cmd = raw + "\n";
             this.cmdInput = "";
+            this.cmdDraft = "";
+            this.cmdHistoryIndex = -1;
+            const trimmed = raw.trim();
+            if (trimmed && this.cmdHistory[this.cmdHistory.length - 1] !== trimmed) {
+                this.cmdHistory = [ ...this.cmdHistory, trimmed ].slice(-CMD_HISTORY_LIMIT);
+                this.saveCmdHistory();
+            }
             this.$root.emitAgent(this.endpoint, "terminalInput", this.terminalName, cmd, (res) => {
                 if (res && !res.ok) {
                     this.$root.toastError(res.msg || "Failed to send command");
                 }
             });
+        },
+
+        historyPrev() {
+            if (this.cmdHistory.length === 0) {
+                return;
+            }
+            if (this.cmdHistoryIndex === -1) {
+                this.cmdDraft = this.cmdInput;
+                this.cmdHistoryIndex = this.cmdHistory.length - 1;
+            } else if (this.cmdHistoryIndex > 0) {
+                this.cmdHistoryIndex -= 1;
+            }
+            this.cmdInput = this.cmdHistory[this.cmdHistoryIndex];
+        },
+
+        historyNext() {
+            if (this.cmdHistoryIndex === -1) {
+                return;
+            }
+            if (this.cmdHistoryIndex < this.cmdHistory.length - 1) {
+                this.cmdHistoryIndex += 1;
+                this.cmdInput = this.cmdHistory[this.cmdHistoryIndex];
+            } else {
+                this.cmdHistoryIndex = -1;
+                this.cmdInput = this.cmdDraft;
+            }
+        },
+
+        resetHistoryNav(event) {
+            // Native input events from typing/pasting; arrow-key navigation
+            // doesn't fire @input so it survives. Anything else resets the
+            // browsing cursor so the next Up starts from the latest entry.
+            if (event && event.isComposing) {
+                return;
+            }
+            this.cmdHistoryIndex = -1;
         },
 
         pushStats() {
@@ -560,99 +788,6 @@ export default {
     gap: 0;
 }
 
-.mc-info-block {
-    background: $dark-header-bg;
-    border-radius: 8px;
-    padding: 10px 14px;
-    display: flex;
-    flex-direction: row;
-    gap: 14px;
-    align-items: flex-start;
-}
-
-.mc-info-col {
-    flex: 1 1 0;
-    min-width: 0;
-}
-
-.mc-info-col-limits {
-    border-left: 1px solid rgba(255, 255, 255, 0.06);
-    padding-left: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.mc-limits-section-title {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: $dark-font-color3;
-    margin-bottom: 1px;
-    line-height: 1.2;
-}
-
-.mc-limits-section-row {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-}
-
-.mc-limits-pair {
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
-    min-width: 0;
-    flex: 1 1 0;
-}
-
-.mc-limits-section-label {
-    font-size: 11px;
-    color: $dark-font-color3;
-    font-family: 'JetBrains Mono', monospace;
-    line-height: 1.3;
-}
-
-.mc-limits-section-value {
-    font-size: 12px;
-    font-weight: 600;
-    color: $dark-font-color;
-    font-family: 'JetBrains Mono', monospace;
-    line-height: 1.3;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-@media (max-width: 1100px) and (min-width: 769px) {
-    .mc-info-col-limits {
-        display: none;
-    }
-}
-
-.mc-info-label {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: $dark-font-color3;
-    margin-bottom: 2px;
-}
-
-.mc-info-value {
-    font-size: 14px;
-    font-weight: 600;
-    color: $dark-font-color;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-
-    &.address-val {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 13px;
-    }
-}
-
 .mc-main-row {
     display: flex;
     gap: 12px;
@@ -668,6 +803,75 @@ export default {
     gap: 0;
 }
 
+.mc-status-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.mc-pill {
+    background: $dark-header-bg;
+    border-radius: 999px;
+    padding: 4px 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    line-height: 1.3;
+    color: $dark-font-color;
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mc-pill-label {
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    color: $dark-font-color3;
+}
+
+.mc-pill-value {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mc-pill-mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+}
+
+.mc-pill-status {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+
+    .mc-status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #888;
+        display: inline-block;
+    }
+
+    &.is-online .mc-status-dot {
+        background: #4ade80;
+        box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+    }
+
+    &.is-offline {
+        color: $dark-font-color3;
+
+        .mc-status-dot {
+            background: #ef4444;
+        }
+    }
+}
+
 .mc-terminal-wrap {
     flex: 1;
     min-height: 0;
@@ -677,9 +881,6 @@ export default {
     display: flex;
     flex-direction: column;
 
-    // The shared Terminal component wraps itself in .shadow-box (10px padding
-    // + dark-bg in dark mode). For the Minecraft console we want the xterm
-    // flush to our rounded black wrap, so neutralise it.
     :deep(.shadow-box) {
         padding: 0;
         background: transparent !important;
@@ -749,17 +950,12 @@ export default {
 @media (max-width: $bp-mobile) {
     .mc-main-row {
         flex-direction: column;
-        // Drop the parent's flex:1 + min-height:0 contract on mobile —
-        // when the column is stacked, we want it to grow to fit the
-        // terminal AND the full height of every chart, not split a
-        // fixed viewport between them (which collapses chart canvases).
         flex: 0 0 auto;
         min-height: 0;
     }
 
     .mc-terminal-col {
         width: 100%;
-        // Terminal still gets a fixed-ish minimum so the xterm is usable.
         flex: 0 0 auto;
     }
 
@@ -776,9 +972,6 @@ export default {
         gap: 8px;
         flex: 0 0 auto;
 
-        // Give each chart a fixed height on mobile so they don't fight
-        // the terminal for vertical space (which previously zero-sized
-        // the canvases).
         > :deep(.mini-chart-wrapper) {
             flex: 0 0 auto;
             height: 130px;

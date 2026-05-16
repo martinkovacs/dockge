@@ -1,9 +1,23 @@
 <template>
     <div class="mini-chart-wrapper">
         <div class="mini-chart-label">{{ label }}</div>
-        <div class="mini-chart-value">
-            <span>{{ currentValue }}</span>
-            <span v-if="subValue" class="mini-chart-sub">{{ subValue }}</span>
+        <div class="mini-chart-value" :class="{ 'mini-chart-value-split': perAxisValues.length > 1 }">
+            <template v-if="perAxisValues.length > 1">
+                <span
+                    v-for="(v, i) in perAxisValues"
+                    :key="v.label"
+                    :class="['mini-chart-value-cell', i === perAxisValues.length - 1 ? 'mini-chart-value-cell-end' : '']"
+                >
+                    {{ v.label }}: <strong>{{ v.text }}</strong>
+                </span>
+            </template>
+            <template v-else>
+                <span>{{ currentValue }}</span>
+                <span v-if="subValue" class="mini-chart-sub">{{ subValue }}</span>
+            </template>
+        </div>
+        <div v-if="secondarySubValue && perAxisValues.length <= 1" class="mini-chart-sub-secondary">
+            {{ secondarySubValue }}
         </div>
         <div class="mini-chart-canvas-wrap">
             <LineChart
@@ -51,14 +65,12 @@ function niceCeil(value) {
     return nice * base;
 }
 
-// Round `value` up to the next multiple of `step`.
 function ceilToStep(value, step) {
     return Math.ceil(value / step) * step;
 }
 
 // Y-axis ceiling for axes that can grow above their nominal max (currently
-// just CPU%). Steps in 20 up to 500, 50 up to 1000, 100 beyond — keeps
-// small overshoots (e.g. 101%) from doubling the axis to 200.
+// CPU%, MSPT). Steps in 20 up to 500, 50 up to 1000, 100 beyond.
 function growStepCeil(value) {
     if (value <= 500) {
         return ceilToStep(value, 20);
@@ -69,9 +81,6 @@ function growStepCeil(value) {
     return ceilToStep(value, 100);
 }
 
-// For the "auto-bytes" unit: pick the right unit scale for a peak value
-// expressed in KB/s. Returns { divisor, suffix } — divide raw KB/s by
-// `divisor` to display in `suffix`.
 function pickByteScale(peakKb) {
     if (peakKb >= 1024 * 1024) {
         return { divisor: 1024 * 1024,
@@ -85,6 +94,26 @@ function pickByteScale(peakKb) {
         suffix: "KB/s" };
 }
 
+function resolveCeiling(peak, maxY, allowGrowAboveMax) {
+    let rawMax;
+    let useGrowStep = false;
+    if (maxY == null) {
+        rawMax = Math.max(10, peak * 1.15);
+    } else if (peak > maxY && allowGrowAboveMax) {
+        rawMax = peak;
+        useGrowStep = true;
+    } else {
+        rawMax = maxY;
+    }
+    if (maxY != null && rawMax === maxY) {
+        return maxY;
+    }
+    if (useGrowStep) {
+        return growStepCeil(rawMax);
+    }
+    return niceCeil(rawMax);
+}
+
 export default {
     components: { LineChart },
 
@@ -96,7 +125,8 @@ export default {
         datasets: {
             type: Array,
             default: () => [],
-            // [{ label, data: number[], color }]
+            // single-axis: [{ label, data, color }]
+            // multi-axis : [{ label, data, color, yAxisID }]
         },
         unit: {
             type: String,
@@ -106,9 +136,6 @@ export default {
             type: Number,
             default: null,
         },
-        // When true and the peak data value exceeds maxY, the y-axis grows
-        // to fit the peak instead of clipping it. When false (default), maxY
-        // is a hard ceiling.
         allowGrowAboveMax: {
             type: Boolean,
             default: false,
@@ -117,6 +144,19 @@ export default {
             type: String,
             default: "",
         },
+        // Optional second line of context below the primary value
+        // (e.g. compose limits / reservations).
+        secondarySubValue: {
+            type: String,
+            default: "",
+        },
+        // When set, each dataset must carry a matching yAxisID. Renders one
+        // y-axis per entry, with its own maxY / allowGrowAboveMax / unit.
+        axes: {
+            type: Array,
+            default: () => [],
+            // [{ id, position: 'left'|'right', maxY, allowGrowAboveMax, unit }]
+        },
     },
 
     computed: {
@@ -124,8 +164,6 @@ export default {
             return this.datasets.some(ds => ds.data && ds.data.length > 0);
         },
 
-        // Resolved display scale: { divisor, suffix } for "auto-bytes",
-        // or { divisor: 1, suffix: this.unit } for plain units.
         scale() {
             if (this.unit === "auto-bytes") {
                 const peak = Math.max(
@@ -136,6 +174,25 @@ export default {
             }
             return { divisor: 1,
                 suffix: this.unit };
+        },
+
+        // Per-dataset latest values shown in the header for multi-axis charts
+        // (mspt left / tps right). Single-axis charts go through currentValue.
+        perAxisValues() {
+            if (!this.axes.length || this.datasets.length < 2) {
+                return [];
+            }
+            return this.datasets.map(ds => {
+                const axis = this.axes.find(a => a.id === ds.yAxisID);
+                const data = ds.data || [];
+                const v = data.length > 0 ? data[data.length - 1] : null;
+                const unit = axis?.unit ?? "";
+                const text = v == null
+                    ? "—"
+                    : `${v.toFixed(1)}${unit ? " " + unit : ""}`;
+                return { label: ds.label,
+                    text };
+            });
         },
 
         currentValue() {
@@ -172,49 +229,83 @@ export default {
                     data: [ ...ds.data ],
                     borderColor: ds.color,
                     backgroundColor: ds.color + "33",
-                    fill: true,
+                    fill: !this.axes.length,
                     tension: 0.4,
                     pointRadius: 0,
                     borderWidth: 2,
+                    yAxisID: ds.yAxisID || "y",
                 })),
             };
         },
 
         chartOptions() {
-            const peak = Math.max(
-                0,
-                ...this.datasets.flatMap(ds => ds.data || []),
-            );
-            // Resolve the y-axis ceiling:
-            //  * no maxY → grow to ~115% of peak (min 10) so the line never
-            //    touches the top edge.
-            //  * maxY set, peak <= maxY → cap at maxY.
-            //  * maxY set, peak > maxY → only honour the cap when
-            //    allowGrowAboveMax is false; otherwise grow to ~110% of peak.
-            let rawMax;
-            let useGrowStep = false;
-            if (this.maxY == null) {
-                rawMax = Math.max(10, peak * 1.15);
-            } else if (peak > this.maxY && this.allowGrowAboveMax) {
-                rawMax = peak;
-                useGrowStep = true;
+            const scales = { x: { display: false } };
+
+            if (this.axes.length) {
+                for (const axis of this.axes) {
+                    const peak = Math.max(
+                        0,
+                        ...this.datasets
+                            .filter(ds => ds.yAxisID === axis.id)
+                            .flatMap(ds => ds.data || []),
+                    );
+                    const yMax = resolveCeiling(peak, axis.maxY ?? null, !!axis.allowGrowAboveMax);
+                    const suffix = axis.unit ?? "";
+                    scales[axis.id] = {
+                        display: true,
+                        position: axis.position || "left",
+                        min: 0,
+                        max: yMax,
+                        border: { display: false },
+                        grid: {
+                            // Only the first axis draws gridlines so the
+                            // chart background doesn't get a double grid.
+                            display: axis === this.axes[0],
+                            color: "rgba(255,255,255,0.05)",
+                            drawTicks: false,
+                        },
+                        ticks: {
+                            stepSize: yMax / 2,
+                            font: { size: 9 },
+                            color: "#888",
+                            padding: 2,
+                            callback(value) {
+                                const n = Number(value);
+                                const formatted = Number.isInteger(n) ? n : n.toFixed(1);
+                                return suffix ? `${formatted}${suffix}` : `${formatted}`;
+                            },
+                        },
+                    };
+                }
             } else {
-                rawMax = this.maxY;
+                const peak = Math.max(
+                    0,
+                    ...this.datasets.flatMap(ds => ds.data || []),
+                );
+                const yMax = resolveCeiling(peak, this.maxY, this.allowGrowAboveMax);
+                const { divisor, suffix } = this.scale;
+                scales.y = {
+                    display: true,
+                    min: 0,
+                    max: yMax,
+                    border: { display: false },
+                    grid: {
+                        color: "rgba(255,255,255,0.05)",
+                        drawTicks: false,
+                    },
+                    ticks: {
+                        stepSize: yMax / 2,
+                        font: { size: 9 },
+                        color: "#888",
+                        padding: 2,
+                        callback(value) {
+                            const n = Number(value) / divisor;
+                            const formatted = Number.isInteger(n) ? n : n.toFixed(1);
+                            return `${formatted}${suffix}`;
+                        },
+                    },
+                };
             }
-            // Hard-capped axes (e.g. memory at 100%) keep their nominal max so
-            // the gridlines line up at 0/50/100. CPU-style growable axes use
-            // fixed absolute steps (25/50/100) for predictable scaling.
-            // Everything else rounds up to a nice multiplier.
-            let yMax;
-            if (this.maxY != null && rawMax === this.maxY) {
-                yMax = this.maxY;
-            } else if (useGrowStep) {
-                yMax = growStepCeil(rawMax);
-            } else {
-                yMax = niceCeil(rawMax);
-            }
-            const stepSize = yMax / 2;
-            const { divisor, suffix } = this.scale;
 
             return {
                 responsive: true,
@@ -229,30 +320,7 @@ export default {
                     legend: { display: false },
                     tooltip: { enabled: false },
                 },
-                scales: {
-                    x: { display: false },
-                    y: {
-                        display: true,
-                        min: 0,
-                        max: yMax,
-                        border: { display: false },
-                        grid: {
-                            color: "rgba(255,255,255,0.05)",
-                            drawTicks: false,
-                        },
-                        ticks: {
-                            stepSize,
-                            font: { size: 9 },
-                            color: "#888",
-                            padding: 2,
-                            callback(value) {
-                                const n = Number(value) / divisor;
-                                const formatted = Number.isInteger(n) ? n : n.toFixed(1);
-                                return `${formatted}${suffix}`;
-                            },
-                        },
-                    },
-                },
+                scales,
             };
         },
     },
@@ -288,11 +356,40 @@ export default {
     gap: 6px;
 }
 
+.mini-chart-value-split {
+    justify-content: space-between;
+}
+
+.mini-chart-value-cell {
+    font-size: 13px;
+    font-weight: 500;
+    color: $dark-font-color3;
+    font-family: 'JetBrains Mono', monospace;
+
+    strong {
+        color: $dark-font-color;
+        font-weight: 600;
+    }
+}
+
+.mini-chart-value-cell-end {
+    text-align: right;
+    margin-left: auto;
+}
+
 .mini-chart-sub {
     font-size: 12px;
     font-weight: 400;
     color: $dark-font-color3;
     font-family: 'JetBrains Mono', monospace;
+}
+
+.mini-chart-sub-secondary {
+    font-size: 11px;
+    color: $dark-font-color3;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.3;
+    margin-top: -1px;
 }
 
 .mini-chart-canvas-wrap {

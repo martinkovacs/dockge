@@ -16,7 +16,7 @@ import General from "./components/settings/General.vue";
 const Security = () => import("./components/settings/Security.vue");
 const GlobalEnv = () => import("./components/settings/GlobalEnv.vue");
 import About from "./components/settings/About.vue";
-import Stacks from "./components/settings/Stacks.vue";
+import MinecraftView from "./components/settings/MinecraftView.vue";
 
 const routes = [
     {
@@ -89,8 +89,8 @@ const routes = [
                                 component: About,
                             },
                             {
-                                path: "stacks",
-                                component: Stacks,
+                                path: "minecraftView",
+                                component: MinecraftView,
                             },
                         ]
                     },

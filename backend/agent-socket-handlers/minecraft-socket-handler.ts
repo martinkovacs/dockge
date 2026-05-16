@@ -290,6 +290,35 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
             }
         });
 
+        agentSocket.on("getMinecraftGlobalSettings", async (callback) => {
+            try {
+                checkLogin(socket);
+                const raw = await Settings.get("displayHistoricTerminalLog");
+                const displayHistoricTerminalLog = raw === undefined || raw === null ? true : !!raw;
+                callbackResult({ ok: true,
+                    displayHistoricTerminalLog }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("setMinecraftGlobalSettings", async (settings: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (!settings || typeof settings !== "object") {
+                    throw new ValidationError("Settings must be an object");
+                }
+                const { displayHistoricTerminalLog } = settings as { displayHistoricTerminalLog?: unknown };
+                if (typeof displayHistoricTerminalLog !== "boolean") {
+                    throw new ValidationError("displayHistoricTerminalLog must be a boolean");
+                }
+                await Settings.set("displayHistoricTerminalLog", displayHistoricTerminalLog, "minecraft");
+                callbackResult({ ok: true }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
         agentSocket.on("minecraftAttach", async (stackName: unknown, serviceName: unknown, callback) => {
             try {
                 checkLogin(socket);
@@ -319,16 +348,24 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
                     terminal.enableKeepAlive = true;
                 }
 
-                // Make sure the per-stack log follower is running. It outlives
-                // the docker-attach PTY so the buffer survives container
-                // restarts; the next minecraftRequestHistory replays it.
-                const history = getHistoryEntry(terminalName, stack.path, serviceName);
-                history.closing = false;
-                if (!history.follower) {
-                    const followerContainer = resolvedContainer ?? await findContainerName(stack.path, serviceName);
-                    if (followerContainer) {
-                        startFollower(terminalName, followerContainer);
+                // The follower is the long-running `docker logs -f` that
+                // outlives the docker-attach PTY so its ring buffer survives
+                // container restarts. Only spin it up when the user wants the
+                // historic-log behaviour; otherwise the terminal only sees
+                // live `docker attach` output.
+                const historyRaw = await Settings.get("displayHistoricTerminalLog");
+                const displayHistoricTerminalLog = historyRaw === undefined || historyRaw === null ? true : !!historyRaw;
+                if (displayHistoricTerminalLog) {
+                    const history = getHistoryEntry(terminalName, stack.path, serviceName);
+                    history.closing = false;
+                    if (!history.follower) {
+                        const followerContainer = resolvedContainer ?? await findContainerName(stack.path, serviceName);
+                        if (followerContainer) {
+                            startFollower(terminalName, followerContainer);
+                        }
                     }
+                } else {
+                    stopFollower(terminalName);
                 }
 
                 terminal.join(socket);

@@ -1,6 +1,25 @@
 <template>
     <div class="my-4">
-        <h5 class="mb-3">Minecraft View</h5>
+        <h5 class="mb-3">{{ $t("minecraftView") }}</h5>
+
+        <div class="mc-global-setting mb-4">
+            <div class="form-check form-switch">
+                <input
+                    id="mcDisplayHistory"
+                    v-model="displayHistory"
+                    class="form-check-input"
+                    type="checkbox"
+                    @change="saveGlobalSettings"
+                />
+                <label class="form-check-label" for="mcDisplayHistory">
+                    {{ $t("displayHistoricTerminalLog") }}
+                </label>
+            </div>
+            <p class="text-secondary mb-0 mt-1" style="font-size: 12px;">
+                {{ $t("displayHistoricTerminalLogHelp") }}
+            </p>
+        </div>
+
         <p class="text-secondary mb-3" style="font-size: 13px;">
             Override the Minecraft panel visibility per stack.
             <strong>Auto</strong> shows it when <code>itzg/minecraft-server</code> or <code>itzg/mc-proxy</code> is detected.
@@ -60,6 +79,7 @@ export default {
             loading: true,
             stacks: [],
             modes: {},
+            displayHistory: true,
             savedMsg: "",
             saveMsgTimeout: null,
             modeOptions: [
@@ -76,12 +96,12 @@ export default {
     mounted() {
         this.loadStacks();
         this.loadModes();
+        this.loadGlobalSettings();
     },
 
     methods: {
         loadStacks() {
             this.loading = true;
-            // completeStackList is already populated in the root state
             const list = this.$root.completeStackList || {};
             this.stacks = Object.values(list);
             this.loading = false;
@@ -92,10 +112,31 @@ export default {
                 if (res.ok && res.settings) {
                     const modes = {};
                     for (const [ key, val ] of Object.entries(res.settings)) {
+                        if (!key.startsWith("minecraftView_")) {
+                            continue;
+                        }
                         const stackName = key.replace("minecraftView_", "");
                         modes[stackName] = val?.mode || "auto";
                     }
                     this.modes = modes;
+                }
+            });
+        },
+
+        loadGlobalSettings() {
+            this.$root.emitAgent("", "getMinecraftGlobalSettings", (res) => {
+                if (res.ok) {
+                    this.displayHistory = res.displayHistoricTerminalLog;
+                }
+            });
+        },
+
+        saveGlobalSettings() {
+            this.$root.emitAgent("", "setMinecraftGlobalSettings", { displayHistoricTerminalLog: this.displayHistory }, (res) => {
+                if (res.ok) {
+                    this.showSaved("Saved");
+                } else {
+                    this.$root.toastError(res.msg || "Failed to save");
                 }
             });
         },
@@ -129,6 +170,12 @@ export default {
 
 <style scoped lang="scss">
 @import "../../styles/vars.scss";
+
+.mc-global-setting {
+    background: $dark-header-bg;
+    border-radius: 8px;
+    padding: 12px 14px;
+}
 
 .stacks-table {
     width: 100%;
