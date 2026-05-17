@@ -5,7 +5,6 @@
             <div class="mc-terminal-col">
                 <div class="mc-status-pills">
                     <span class="mc-pill mc-pill-status" :class="rconAvailable ? 'is-online' : 'is-offline'">
-                        <span class="mc-status-dot"></span>
                         {{ rconAvailable ? "Online" : "Offline" }}
                     </span>
                     <span class="mc-pill">
@@ -16,6 +15,11 @@
                         <span class="mc-pill-label">Uptime</span>
                         <span class="mc-pill-value">{{ uptimeText }}</span>
                     </span>
+                    <span class="mc-pill">
+                        <span class="mc-pill-label">Disk</span>
+                        <span class="mc-pill-value">{{ diskDisplay }}</span>
+                    </span>
+                    <span class="mc-pill-divider" aria-hidden="true"></span>
                     <span class="mc-pill">
                         <span class="mc-pill-label">Players</span>
                         <span class="mc-pill-value">{{ playersDisplay }}</span>
@@ -34,6 +38,7 @@
                         :endpoint="endpoint"
                         mode="displayOnly"
                         style="height: 100%;"
+                        @scroll-state="onTerminalScroll"
                     />
                     <div v-else class="mc-terminal-offline">
                         <span v-if="attaching">
@@ -42,6 +47,16 @@
                         </span>
                         <span v-else>Server is offline</span>
                     </div>
+                    <button
+                        v-if="terminalName && !terminalAtBottom"
+                        type="button"
+                        class="mc-scroll-bottom"
+                        title="Scroll to bottom"
+                        @click="scrollTerminalToBottom"
+                    >
+                        <font-awesome-icon icon="chevron-down" class="me-1" />
+                        Jump to bottom
+                    </button>
                 </div>
 
                 <div class="mc-cmd-input mt-2">
@@ -107,8 +122,24 @@ import { readResourceLimits, readJvmMemory } from "./mcCompose";
 
 const TICK_POLL_MS = 1000;
 const PLAYERS_POLL_MS = 5000;
+const DISK_POLL_MS = 30000;
 const HISTORY = 60;
 const CMD_HISTORY_LIMIT = 200;
+
+function formatBytes(bytes) {
+    if (bytes == null || !Number.isFinite(bytes)) {
+        return "—";
+    }
+    const units = [ "B", "KiB", "MiB", "GiB", "TiB" ];
+    let v = bytes;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+        v /= 1024;
+        i += 1;
+    }
+    const decimals = v >= 100 || i === 0 ? 0 : 1;
+    return `${v.toFixed(decimals)} ${units[i]}`;
+}
 
 function formatUptime(startedAt) {
     if (!startedAt) {
@@ -254,7 +285,9 @@ function parseVersion(stdout) {
     if (!stdout) {
         return null;
     }
-    const m = stdout.match(/\bid\s*=\s*([^\s[]+)/i);
+    // Bound the capture between `id = ` and the next field (`name = …`)
+    // because the lines often come back joined without separators.
+    const m = stdout.match(/\bid\s*=\s*(\S+?)(?=\s*name\s*=|\s|$)/i);
     return m ? m[1].trim() : null;
 }
 
@@ -315,6 +348,11 @@ export default {
             mspt: null,
             players: null,
             version: null,
+            publicIp: null,
+            disk: null,
+            diskTimer: null,
+            diskInFlight: false,
+            terminalAtBottom: true,
         };
     },
 
@@ -353,7 +391,15 @@ export default {
             const portEntry = svc.ports[0];
             const portStr = typeof portEntry === "string" ? portEntry : String(portEntry.target || portEntry.published || portEntry);
             const hostPort = portStr.split(":").pop()?.split("/")[0] || portStr;
-            return `${window.location.hostname}:${hostPort}`;
+            const host = this.publicIp || window.location.hostname;
+            return `${host}:${hostPort}`;
+        },
+
+        diskDisplay() {
+            if (!this.disk) {
+                return "—";
+            }
+            return `${formatBytes(this.disk.used)} / ${formatBytes(this.disk.total)}`;
         },
 
         playersDisplay() {
@@ -417,10 +463,10 @@ export default {
             if (lim || res) {
                 const lr = [];
                 if (lim) {
-                    lr.push(`lim ${lim}`);
+                    lr.push(`Limit ${lim}`);
                 }
                 if (res) {
-                    lr.push(`res ${res}`);
+                    lr.push(`Reserved ${res}`);
                 }
                 parts.push(lr.join(" / "));
             }
@@ -435,10 +481,10 @@ export default {
             }
             const lr = [];
             if (lim) {
-                lr.push(`lim ${lim}`);
+                lr.push(`Limit ${lim}`);
             }
             if (res) {
-                lr.push(`res ${res}`);
+                lr.push(`Reserved ${res}`);
             }
             return lr.join(" / ");
         },
@@ -496,6 +542,7 @@ export default {
                 this.attach();
                 this.startUptimePolling();
                 this.startRconPolling();
+                this.startDiskPolling();
             } else {
                 if (this.terminalName) {
                     this.$root.emitAgent(this.endpoint, "minecraftClearHistory", this.terminalName, () => {});
@@ -504,9 +551,11 @@ export default {
                 this.attaching = false;
                 this.stopUptimePolling();
                 this.stopRconPolling();
+                this.stopDiskPolling();
                 this.resetRconStats();
                 this.startedAt = "";
                 this.rconAvailable = false;
+                this.disk = null;
             }
         },
 
@@ -533,10 +582,12 @@ export default {
 
     mounted() {
         this.loadCmdHistory();
+        this.fetchPublicIp();
         if (this.isRunning) {
             this.attach();
             this.startUptimePolling();
             this.startRconPolling();
+            this.startDiskPolling();
         }
     },
 
@@ -547,6 +598,7 @@ export default {
         }
         this.stopUptimePolling();
         this.stopRconPolling();
+        this.stopDiskPolling();
         if (this.terminalName) {
             this.$root.emitAgent(this.endpoint, "leaveCombinedTerminal", this.stackName, () => {});
         }
@@ -805,6 +857,48 @@ export default {
             this.netRxHistory = [ ...this.netRxHistory.slice(1), rxRate ];
             this.netTxHistory = [ ...this.netTxHistory.slice(1), txRate ];
         },
+
+        fetchPublicIp() {
+            this.$root.emitAgent(this.endpoint, "minecraftGetPublicAddress", (res) => {
+                if (res && res.ok && res.ip) {
+                    this.publicIp = res.ip;
+                }
+            });
+        },
+
+        startDiskPolling() {
+            this.stopDiskPolling();
+            this.pollDisk();
+            this.diskTimer = setInterval(() => this.pollDisk(), DISK_POLL_MS);
+        },
+
+        stopDiskPolling() {
+            if (this.diskTimer) {
+                clearInterval(this.diskTimer);
+                this.diskTimer = null;
+            }
+        },
+
+        pollDisk() {
+            if (this.diskInFlight || !this.isRunning || !this.serviceName) {
+                return;
+            }
+            this.diskInFlight = true;
+            this.$root.emitAgent(this.endpoint, "minecraftDiskUsage", this.stackName, this.serviceName, (res) => {
+                this.diskInFlight = false;
+                if (res && res.ok) {
+                    this.disk = res.disk || null;
+                }
+            });
+        },
+
+        onTerminalScroll(atBottom) {
+            this.terminalAtBottom = atBottom;
+        },
+
+        scrollTerminalToBottom() {
+            this.$refs.mcTerminal?.scrollToBottom();
+        },
     },
 };
 </script>
@@ -837,6 +931,7 @@ export default {
 .mc-status-pills {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
     margin-bottom: 10px;
 }
@@ -846,10 +941,10 @@ export default {
     border-radius: 999px;
     padding: 4px 12px;
     display: inline-flex;
-    align-items: center;
+    align-items: baseline;
     gap: 6px;
     font-size: 12px;
-    line-height: 1.3;
+    line-height: 16px;
     color: $dark-font-color;
     max-width: 280px;
     overflow: hidden;
@@ -860,50 +955,69 @@ export default {
 .mc-pill-label {
     text-transform: uppercase;
     font-size: 10px;
+    line-height: 16px;
     letter-spacing: 0.05em;
     color: $dark-font-color3;
 }
 
 .mc-pill-value {
     font-weight: 600;
+    font-size: 12px;
+    line-height: 16px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .mc-pill-mono {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11.5px;
+}
+
+.mc-pill-divider {
+    width: 1px;
+    align-self: stretch;
+    background: $dark-border-color;
+    margin: 2px 2px;
 }
 
 .mc-pill-status {
-    font-weight: 600;
+    align-items: center;
+    font-weight: 700;
     text-transform: uppercase;
     font-size: 11px;
+    line-height: 16px;
     letter-spacing: 0.04em;
 
-    .mc-status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #888;
-        display: inline-block;
-    }
-
-    &.is-online .mc-status-dot {
-        background: #4ade80;
-        box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+    &.is-online {
+        background: #1f8a4c;
+        color: #ffffff;
     }
 
     &.is-offline {
-        color: $dark-font-color3;
+        background: #b9352f;
+        color: #ffffff;
+    }
+}
 
-        .mc-status-dot {
-            background: #ef4444;
-        }
+@media (max-width: 1500px) and (min-width: 1201px) {
+    // Width band where the single-line row of horizontal pills no longer
+    // fits — switch each pill to a vertical label-over-value layout.
+    .mc-pill {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0;
+        padding: 2px 10px;
+    }
+    .mc-pill-label { line-height: 1.1; }
+    .mc-pill-value { line-height: 1.2; }
+    .mc-pill-status {
+        flex-direction: row;
+        align-items: center;
+        padding: 4px 12px;
     }
 }
 
 .mc-terminal-wrap {
+    position: relative;
     flex: 1;
     min-height: 0;
     background: #000;
@@ -927,6 +1041,27 @@ export default {
         flex: 1;
         height: 100%;
         min-height: 0;
+    }
+}
+
+.mc-scroll-bottom {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    background: rgba(20, 24, 33, 0.85);
+    color: $dark-font-color;
+    border: 1px solid $dark-border-color;
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-size: 12px;
+    backdrop-filter: blur(4px);
+    cursor: pointer;
+
+    &:hover {
+        background: rgba(36, 42, 56, 0.95);
+        color: #fff;
     }
 }
 
@@ -978,7 +1113,7 @@ export default {
     }
 }
 
-@media (max-width: $bp-mobile) {
+@media (max-width: $bp-xl) {
     .mc-main-row {
         flex-direction: column;
         flex: 0 0 auto;

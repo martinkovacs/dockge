@@ -27,6 +27,17 @@
             <li class="nav-item">
                 <a
                     class="nav-link"
+                    :class="{ active: activeTab === 'bash' }"
+                    href="#"
+                    @click.prevent="activateBash"
+                >
+                    <font-awesome-icon icon="terminal" class="me-1" />
+                    Bash
+                </a>
+            </li>
+            <li class="nav-item">
+                <a
+                    class="nav-link"
                     :class="{ active: activeTab === 'limits' }"
                     href="#"
                     @click.prevent="activeTab = 'limits'"
@@ -65,6 +76,23 @@
                 :endpoint="endpoint"
                 :stack-name="stackName"
             />
+            <div v-if="bashEverActivated" v-show="activeTab === 'bash'" class="mc-bash-pane">
+                <div class="mc-bash-toolbar">
+                    <button class="btn btn-sm btn-normal" @click="toggleBashShell">
+                        {{ bashShell === "bash" ? $t("Switch to sh") : $t("Switch to bash") }}
+                    </button>
+                </div>
+                <Terminal
+                    :key="bashShell"
+                    class="mc-bash-terminal"
+                    mode="interactive"
+                    :name="bashTerminalName"
+                    :endpoint="endpoint"
+                    :stack-name="stackName"
+                    :service-name="minecraftServiceName"
+                    :shell="bashShell"
+                />
+            </div>
             <MinecraftLimits
                 v-if="activeTab === 'limits'"
                 :endpoint="endpoint"
@@ -91,6 +119,8 @@ import MinecraftConsole from "./MinecraftConsole.vue";
 import MinecraftFiles from "./MinecraftFiles.vue";
 import MinecraftLimits from "./MinecraftLimits.vue";
 import MinecraftSettings from "./MinecraftSettings.vue";
+import Terminal from "../Terminal.vue";
+import { getContainerExecTerminalName } from "../../../../common/util-common";
 
 const MINECRAFT_IMAGES = [ "itzg/minecraft-server", "itzg/mc-proxy" ];
 
@@ -99,7 +129,8 @@ export default {
         MinecraftConsole,
         MinecraftFiles,
         MinecraftLimits,
-        MinecraftSettings },
+        MinecraftSettings,
+        Terminal },
 
     props: {
         endpoint: { type: String,
@@ -121,6 +152,8 @@ export default {
     data() {
         return {
             activeTab: "console",
+            bashEverActivated: false,
+            bashShell: "bash",
         };
     },
 
@@ -134,6 +167,20 @@ export default {
                 }
             }
             return Object.keys(services)[0] || "";
+        },
+
+        bashTerminalName() {
+            return getContainerExecTerminalName(this.endpoint, this.stackName, this.minecraftServiceName, 0);
+        },
+    },
+
+    methods: {
+        activateBash() {
+            this.activeTab = "bash";
+            this.bashEverActivated = true;
+        },
+        toggleBashShell() {
+            this.bashShell = this.bashShell === "bash" ? "sh" : "bash";
         },
     },
 };
@@ -182,6 +229,21 @@ export default {
         flex: 1;
         min-height: 0;
     }
+}
+
+.mc-bash-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mc-bash-toolbar {
+    flex: 0 0 auto;
+}
+
+.mc-bash-terminal {
+    flex: 1;
+    min-height: 0;
 }
 
 @media (max-width: $bp-mobile) {

@@ -852,6 +852,71 @@ export class MinecraftSocketHandler extends AgentSocketHandler {
             }
         });
 
+        agentSocket.on("minecraftGetPublicAddress", async (callback) => {
+            try {
+                checkLogin(socket);
+                const ip = await server.getPublicIp();
+                callbackResult({ ok: true,
+                    ip }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("minecraftDiskUsage", async (stackName: unknown, serviceName: unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+                if (typeof serviceName !== "string") {
+                    throw new ValidationError("Service name must be a string");
+                }
+                const stack = await Stack.getStack(server, stackName);
+                const containerName = await findContainerName(stack.path, serviceName);
+                if (!containerName) {
+                    callbackResult({ ok: false,
+                        msg: "Container not running" }, callback);
+                    return;
+                }
+                // `df -PB1 /data` → POSIX output in bytes for the /data
+                // mount inside the container (the itzg/minecraft-server
+                // world dir). Fail soft if the image lacks df or /data.
+                try {
+                    const res = await childProcessAsync.spawn(
+                        "docker",
+                        [ "exec", containerName, "df", "-PB1", "/data" ],
+                        { encoding: "utf-8",
+                            timeout: 5000 }
+                    );
+                    const stdout = (res.stdout?.toString() ?? "").trim();
+                    const lines = stdout.split("\n");
+                    if (lines.length < 2) {
+                        callbackResult({ ok: true,
+                            disk: null }, callback);
+                        return;
+                    }
+                    const cols = lines[1].split(/\s+/);
+                    const total = parseInt(cols[1], 10);
+                    const used = parseInt(cols[2], 10);
+                    if (!Number.isFinite(total) || !Number.isFinite(used) || total === 0) {
+                        callbackResult({ ok: true,
+                            disk: null }, callback);
+                        return;
+                    }
+                    callbackResult({ ok: true,
+                        disk: { used,
+                            total,
+                            usedPercent: (used / total) * 100 } }, callback);
+                } catch (e) {
+                    callbackResult({ ok: true,
+                        disk: null }, callback);
+                }
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
         agentSocket.on("minecraftFileMkdir", async (stackName: unknown, relPath: unknown, callback) => {
             try {
                 checkLogin(socket);

@@ -24,6 +24,7 @@
         </div>
         <div class="editor-box">
             <code-mirror
+                v-if="fontsReady"
                 v-model="localContent"
                 :extensions="extensions"
                 minimal
@@ -91,6 +92,7 @@ export default {
             localContent: this.content,
             saving: false,
             fileName: this.filePath.split("/").pop(),
+            fontsReady: false,
         };
     },
 
@@ -103,6 +105,23 @@ export default {
             parts.pop();
             return parts.join("/") || "";
         },
+    },
+
+    mounted() {
+        // Delay mounting CodeMirror until web fonts have settled so the
+        // first paint already uses the final metrics (otherwise the text
+        // visibly jumps when JetBrains Mono finishes loading).
+        if (document.fonts && document.fonts.status === "loaded") {
+            this.fontsReady = true;
+        } else if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(() => {
+                this.fontsReady = true;
+            }).catch(() => {
+                this.fontsReady = true;
+            });
+        } else {
+            this.fontsReady = true;
+        }
     },
 
     methods: {
@@ -207,6 +226,19 @@ export default {
     :deep(.cm-content),
     :deep(.cm-gutterElement) {
         line-height: 1.5;
+    }
+
+    // Suppress the default active-line highlight — the dracula theme
+    // leaves it as the editor's base color, which paints a white sliver
+    // next to the gutter on click.
+    :deep(.cm-activeLine),
+    :deep(.cm-activeLineGutter) {
+        background-color: transparent;
+    }
+
+    :deep(.cm-gutters) {
+        background-color: $dark-bg;
+        border-right: 1px solid $dark-border-color;
     }
 }
 </style>

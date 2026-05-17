@@ -84,6 +84,11 @@ export class DockgeServer {
 
     stacksDir : string = "";
 
+    // Public IP cached for the lifetime of the process; null until first
+    // successful fetch. Restarts naturally re-fetch because a new process
+    // starts with the field reset to null.
+    publicIp : string | null = null;
+
     /**
      *
      */
@@ -676,6 +681,34 @@ export class DockgeServer {
         } catch (e) {
             log.error("getDockerStats", e);
             return stats;
+        }
+    }
+
+    async getPublicIp() : Promise<string | null> {
+        if (this.publicIp) {
+            return this.publicIp;
+        }
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 5000);
+            const res = await fetch("https://cloudflare.com/cdn-cgi/trace", {
+                signal: controller.signal,
+            });
+            clearTimeout(timeout);
+            if (!res.ok) {
+                return null;
+            }
+            const text = await res.text();
+            for (const line of text.split("\n")) {
+                if (line.startsWith("ip=")) {
+                    this.publicIp = line.slice(3).trim();
+                    return this.publicIp;
+                }
+            }
+            return null;
+        } catch (e) {
+            log.warn("getPublicIp", "Failed to fetch public IP: " + e);
+            return null;
         }
     }
 

@@ -1,6 +1,5 @@
 ############################################
 # Stage 1: Build healthcheck binary (Go)
-# ─── runs in parallel with the base stage
 ############################################
 FROM golang:1.26-alpine3.22 AS build_healthcheck
 WORKDIR /app
@@ -9,10 +8,10 @@ RUN CGO_ENABLED=0 go build -x -o ./extra/healthcheck ./extra/healthcheck.go
 
 ############################################
 # Stage 2: Base image with system deps
-# ─── rarely changes → excellent cache hit
 ############################################
 FROM node:24-alpine3.22 AS base
 RUN apk add --no-cache \
+        bash \
         dumb-init \
         docker-cli \
         docker-cli-compose \
@@ -20,7 +19,6 @@ RUN apk add --no-cache \
 
 ############################################
 # Stage 3: Install deps, build, then prune
-# ─── single npm ci instead of two
 ############################################
 FROM base AS build
 WORKDIR /app
@@ -31,7 +29,7 @@ RUN npm run build:frontend \
     && npm prune --omit=dev
 
 ############################################
-# Stage 4: ⭐ Release image
+# Stage 4: Release image
 ############################################
 FROM base AS release
 WORKDIR /app

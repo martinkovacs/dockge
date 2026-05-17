@@ -132,6 +132,7 @@
     "Restarted": "Restarted",
     "Downed": "Downed",
     "Switch to sh": "Switch to sh",
+    "Switch to bash": "Switch to bash",
     "terminal": "Terminal",
     "CurrentHostname": "(Unset: Follow current hostname)",
     "New Container Name...": "New Container Name...",

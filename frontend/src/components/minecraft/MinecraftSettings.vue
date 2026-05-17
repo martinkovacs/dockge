@@ -455,8 +455,19 @@ export default {
 
 @media (max-width: $bp-mobile) {
     .mc-env-row {
-        grid-template-columns: 1fr;
-        gap: 4px;
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+            "key   trash"
+            "value trash";
+        gap: 4px 8px;
+        align-items: center;
+    }
+
+    .mc-env-key   { grid-area: key; }
+    .mc-env-value { grid-area: value; }
+    .mc-env-remove {
+        grid-area: trash;
+        align-self: center;
     }
 
     .mc-env-eq {

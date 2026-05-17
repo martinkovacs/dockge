@@ -65,7 +65,7 @@ export default {
             default: "displayOnly",
         }
     },
-    emits: [ "has-data" ],
+    emits: [ "has-data", "scroll-state" ],
     data() {
         return {
             first: true,
@@ -118,6 +118,16 @@ export default {
                 this.$emit("has-data");
                 this.first = false;
             }
+        });
+
+        // Emit scroll state so consumers can toggle a jump-to-bottom UI.
+        this.terminal.onScroll(() => {
+            this.emitScrollState();
+        });
+        this.terminal.onWriteParsed(() => {
+            // New output below the viewport may push the user "off-bottom"
+            // momentarily; re-evaluate after each write.
+            this.emitScrollState();
         });
 
         this.bind();
@@ -266,6 +276,19 @@ export default {
                     }
                 });
             });
+        },
+
+        scrollToBottom() {
+            this.terminal?.scrollToBottom();
+        },
+
+        emitScrollState() {
+            const buf = this.terminal?.buffer?.active;
+            if (!buf) {
+                return;
+            }
+            const atBottom = buf.viewportY >= buf.baseY;
+            this.$emit("scroll-state", atBottom);
         },
 
         /**
